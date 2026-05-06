@@ -226,6 +226,8 @@ const Index = () => {
                       setMode("PD");
                       setProfileIdx(i);
                       setVoltage(v);
+                      void send({ cmd: "setMode", mode: "PD" });
+                      void send({ cmd: "setProfile", idx: i });
                     }}
                     className={`flex w-full items-center justify-between rounded-lg border p-3 text-left transition-[var(--transition-smooth)] ${
                       active
