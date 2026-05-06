@@ -9,6 +9,8 @@ import {
   Cpu,
   Gauge,
   MonitorCheck,
+  Plug,
+  PlugZap,
   Power,
   Settings2,
   Usb,
@@ -18,39 +20,41 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
+import { useSerialTelemetry } from "@/hooks/useSerialTelemetry";
 
 const FIXED_PROFILES = [5, 9, 12, 15, 20];
 
 const Index = () => {
+  const { supported, status, error, telemetry, connect, disconnect, send } = useSerialTelemetry();
+
   const [mode, setMode] = useState<"PD" | "PPS">("PPS");
   const [voltage, setVoltage] = useState(9.0);
-  const [current, setCurrent] = useState(1.42);
   const [profileIdx, setProfileIdx] = useState(1);
 
-  // Simulate live current readings
+  // Sync local state from device telemetry when it arrives
   useEffect(() => {
-    const id = setInterval(() => {
-      setCurrent((c) => {
-        const next = c + (Math.random() - 0.5) * 0.08;
-        return Math.max(0.1, Math.min(3.0, next));
-      });
-    }, 800);
-    return () => clearInterval(id);
-  }, []);
+    if (!telemetry) return;
+    setVoltage(telemetry.v);
+    if (telemetry.mode) setMode(telemetry.mode);
+    if (typeof telemetry.profile === "number") setProfileIdx(telemetry.profile);
+  }, [telemetry]);
+
+  const current = telemetry?.i ?? 0;
+  const power = +(((telemetry?.p ?? voltage * current)) || 0).toFixed(2);
+  const live = status === "connected" && telemetry !== null;
 
   const adjust = (delta: number) => {
     if (mode === "PPS") {
-      setVoltage((v) => Math.max(3.3, Math.min(21, +(v + delta).toFixed(2))));
+      const next = Math.max(3.3, Math.min(21, +(voltage + delta).toFixed(2)));
+      setVoltage(next);
+      void send({ cmd: "setVoltage", v: next });
     } else {
-      setProfileIdx((i) => {
-        const next = Math.max(0, Math.min(FIXED_PROFILES.length - 1, i + (delta > 0 ? 1 : -1)));
-        setVoltage(FIXED_PROFILES[next]);
-        return next;
-      });
+      const nextIdx = Math.max(0, Math.min(FIXED_PROFILES.length - 1, profileIdx + (delta > 0 ? 1 : -1)));
+      setProfileIdx(nextIdx);
+      setVoltage(FIXED_PROFILES[nextIdx]);
+      void send({ cmd: "setProfile", idx: nextIdx });
     }
   };
-
-  const power = +(voltage * current).toFixed(2);
 
   return (
     <div className="min-h-screen px-4 py-8 md:px-8 md:py-12">
