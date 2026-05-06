@@ -176,6 +176,8 @@ const Index = () => {
                 onClick={() => {
                   setMode("PD");
                   setVoltage(FIXED_PROFILES[profileIdx]);
+                  void send({ cmd: "setMode", mode: "PD" });
+                  void send({ cmd: "setProfile", idx: profileIdx });
                 }}
                 className="h-14 gap-2"
               >
@@ -183,7 +185,10 @@ const Index = () => {
               </Button>
               <Button
                 variant={mode === "PPS" ? "default" : "outline"}
-                onClick={() => setMode("PPS")}
+                onClick={() => {
+                  setMode("PPS");
+                  void send({ cmd: "setMode", mode: "PPS" });
+                }}
                 className="h-14 gap-2"
               >
                 <Gauge className="h-4 w-4" /> PPS Mode
