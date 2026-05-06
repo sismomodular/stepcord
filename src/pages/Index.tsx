@@ -74,16 +74,56 @@ const Index = () => {
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            <Badge variant="outline" className="gap-1.5 border-success/40 bg-success/10 text-success">
-              <span className="h-1.5 w-1.5 animate-pulse-glow rounded-full bg-success" />
-              Online
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge
+              variant="outline"
+              className={
+                live
+                  ? "gap-1.5 border-success/40 bg-success/10 text-success"
+                  : status === "connecting"
+                  ? "gap-1.5 border-warning/40 bg-warning/10 text-warning"
+                  : "gap-1.5 border-border/60 bg-secondary/40 text-muted-foreground"
+              }
+            >
+              <span
+                className={`h-1.5 w-1.5 rounded-full ${
+                  live ? "animate-pulse-glow bg-success" : status === "connecting" ? "bg-warning" : "bg-muted-foreground"
+                }`}
+              />
+              {live ? "Live · WebSerial" : status === "connecting" ? "Connecting" : status === "unsupported" ? "WebSerial unsupported" : "Disconnected"}
             </Badge>
             <Badge variant="outline" className="gap-1 border-border/60 text-muted-foreground">
               <Cpu className="h-3 w-3" /> RP2040
             </Badge>
+            {status === "connected" ? (
+              <Button size="sm" variant="outline" onClick={() => void disconnect()} className="gap-2">
+                <Plug className="h-3.5 w-3.5" /> Disconnect
+              </Button>
+            ) : (
+              <Button
+                size="sm"
+                onClick={() => void connect()}
+                disabled={!supported || status === "connecting"}
+                className="gap-2"
+              >
+                <PlugZap className="h-3.5 w-3.5" />
+                {status === "connecting" ? "Connecting…" : "Connect device"}
+              </Button>
+            )}
           </div>
         </header>
+
+        {error && (
+          <div className="rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-2 text-sm text-destructive">
+            {error}
+          </div>
+        )}
+
+        {!supported && (
+          <div className="rounded-lg border border-warning/40 bg-warning/5 px-4 py-3 text-sm text-muted-foreground">
+            WebSerial isn't available in this browser. Open the dashboard in Chrome or Edge on desktop to connect to the PicoPD over USB.
+          </div>
+        )}
 
         {/* Top stats */}
         <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
