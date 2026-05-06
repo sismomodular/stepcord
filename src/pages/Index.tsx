@@ -9,6 +9,8 @@ import {
   Cpu,
   Gauge,
   MonitorCheck,
+  Plug,
+  PlugZap,
   Power,
   Settings2,
   Usb,
@@ -18,39 +20,41 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
+import { useSerialTelemetry } from "@/hooks/useSerialTelemetry";
 
 const FIXED_PROFILES = [5, 9, 12, 15, 20];
 
 const Index = () => {
+  const { supported, status, error, telemetry, connect, disconnect, send } = useSerialTelemetry();
+
   const [mode, setMode] = useState<"PD" | "PPS">("PPS");
   const [voltage, setVoltage] = useState(9.0);
-  const [current, setCurrent] = useState(1.42);
   const [profileIdx, setProfileIdx] = useState(1);
 
-  // Simulate live current readings
+  // Sync local state from device telemetry when it arrives
   useEffect(() => {
-    const id = setInterval(() => {
-      setCurrent((c) => {
-        const next = c + (Math.random() - 0.5) * 0.08;
-        return Math.max(0.1, Math.min(3.0, next));
-      });
-    }, 800);
-    return () => clearInterval(id);
-  }, []);
+    if (!telemetry) return;
+    setVoltage(telemetry.v);
+    if (telemetry.mode) setMode(telemetry.mode);
+    if (typeof telemetry.profile === "number") setProfileIdx(telemetry.profile);
+  }, [telemetry]);
+
+  const current = telemetry?.i ?? 0;
+  const power = +(((telemetry?.p ?? voltage * current)) || 0).toFixed(2);
+  const live = status === "connected" && telemetry !== null;
 
   const adjust = (delta: number) => {
     if (mode === "PPS") {
-      setVoltage((v) => Math.max(3.3, Math.min(21, +(v + delta).toFixed(2))));
+      const next = Math.max(3.3, Math.min(21, +(voltage + delta).toFixed(2)));
+      setVoltage(next);
+      void send({ cmd: "setVoltage", v: next });
     } else {
-      setProfileIdx((i) => {
-        const next = Math.max(0, Math.min(FIXED_PROFILES.length - 1, i + (delta > 0 ? 1 : -1)));
-        setVoltage(FIXED_PROFILES[next]);
-        return next;
-      });
+      const nextIdx = Math.max(0, Math.min(FIXED_PROFILES.length - 1, profileIdx + (delta > 0 ? 1 : -1)));
+      setProfileIdx(nextIdx);
+      setVoltage(FIXED_PROFILES[nextIdx]);
+      void send({ cmd: "setProfile", idx: nextIdx });
     }
   };
-
-  const power = +(voltage * current).toFixed(2);
 
   return (
     <div className="min-h-screen px-4 py-8 md:px-8 md:py-12">
@@ -70,16 +74,56 @@ const Index = () => {
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            <Badge variant="outline" className="gap-1.5 border-success/40 bg-success/10 text-success">
-              <span className="h-1.5 w-1.5 animate-pulse-glow rounded-full bg-success" />
-              Online
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge
+              variant="outline"
+              className={
+                live
+                  ? "gap-1.5 border-success/40 bg-success/10 text-success"
+                  : status === "connecting"
+                  ? "gap-1.5 border-warning/40 bg-warning/10 text-warning"
+                  : "gap-1.5 border-border/60 bg-secondary/40 text-muted-foreground"
+              }
+            >
+              <span
+                className={`h-1.5 w-1.5 rounded-full ${
+                  live ? "animate-pulse-glow bg-success" : status === "connecting" ? "bg-warning" : "bg-muted-foreground"
+                }`}
+              />
+              {live ? "Live · WebSerial" : status === "connecting" ? "Connecting" : status === "unsupported" ? "WebSerial unsupported" : "Disconnected"}
             </Badge>
             <Badge variant="outline" className="gap-1 border-border/60 text-muted-foreground">
               <Cpu className="h-3 w-3" /> RP2040
             </Badge>
+            {status === "connected" ? (
+              <Button size="sm" variant="outline" onClick={() => void disconnect()} className="gap-2">
+                <Plug className="h-3.5 w-3.5" /> Disconnect
+              </Button>
+            ) : (
+              <Button
+                size="sm"
+                onClick={() => void connect()}
+                disabled={!supported || status === "connecting"}
+                className="gap-2"
+              >
+                <PlugZap className="h-3.5 w-3.5" />
+                {status === "connecting" ? "Connecting…" : "Connect device"}
+              </Button>
+            )}
           </div>
         </header>
+
+        {error && (
+          <div className="rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-2 text-sm text-destructive">
+            {error}
+          </div>
+        )}
+
+        {!supported && (
+          <div className="rounded-lg border border-warning/40 bg-warning/5 px-4 py-3 text-sm text-muted-foreground">
+            WebSerial isn't available in this browser. Open the dashboard in Chrome or Edge on desktop to connect to the PicoPD over USB.
+          </div>
+        )}
 
         {/* Top stats */}
         <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
@@ -132,6 +176,8 @@ const Index = () => {
                 onClick={() => {
                   setMode("PD");
                   setVoltage(FIXED_PROFILES[profileIdx]);
+                  void send({ cmd: "setMode", mode: "PD" });
+                  void send({ cmd: "setProfile", idx: profileIdx });
                 }}
                 className="h-14 gap-2"
               >
@@ -139,7 +185,10 @@ const Index = () => {
               </Button>
               <Button
                 variant={mode === "PPS" ? "default" : "outline"}
-                onClick={() => setMode("PPS")}
+                onClick={() => {
+                  setMode("PPS");
+                  void send({ cmd: "setMode", mode: "PPS" });
+                }}
                 className="h-14 gap-2"
               >
                 <Gauge className="h-4 w-4" /> PPS Mode
@@ -177,6 +226,8 @@ const Index = () => {
                       setMode("PD");
                       setProfileIdx(i);
                       setVoltage(v);
+                      void send({ cmd: "setMode", mode: "PD" });
+                      void send({ cmd: "setProfile", idx: i });
                     }}
                     className={`flex w-full items-center justify-between rounded-lg border p-3 text-left transition-[var(--transition-smooth)] ${
                       active
