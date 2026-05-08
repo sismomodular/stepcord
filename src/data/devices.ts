@@ -18,4 +18,15 @@ export const DEVICES: MusicalDevice[] = [
   { name: "Digitakt II",     brand: "Elektron",      voltage: 12.0, current: 1.0,  defaultPolarity: "center-positive" },
   { name: "MicroFreak",      brand: "Arturia",       voltage: 12.0, current: 1.0,  defaultPolarity: "center-positive" },
   { name: "Volca Series",    brand: "Korg",          voltage: 9.0,  current: 0.5,  defaultPolarity: "center-negative" },
+  { name: "Manual PPS Mode", brand: "Custom",        voltage: 5.0,  current: 3.0,  defaultPolarity: "center-positive" },
 ];
+
+// Index of the manual mode entry in DEVICES (last item).
+export const MANUAL_IDX = DEVICES.length - 1;
+
+// PPS voltage bounds for manual mode (USB-PD PPS spec range, AP33772S typical).
+export const MANUAL_MIN_V = 3.3;
+export const MANUAL_MAX_V = 21.0;
+export const MANUAL_STEP_V = 0.1;
+export const MANUAL_SAFETY_THRESHOLD_V = 12.0;
+export const MANUAL_SAFETY_HOLD_MS = 2000;
