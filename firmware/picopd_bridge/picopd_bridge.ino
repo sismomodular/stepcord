@@ -17,8 +17,8 @@
 #include <Wire.h>
 
 // ---- AP33772S (USB-PD sink controller on PicoPD Pro) ----
-// I2C address per AP33772S datasheet
-static const uint8_t AP33772S_ADDR = 0x52;
+// I2C address per AP33772S datasheet (PicoPD Pro uses 0x51)
+static const uint8_t AP33772S_ADDR = 0x51;
 
 // Register map (subset – check datasheet for full list)
 static const uint8_t REG_STATUS    = 0x01;
@@ -26,9 +26,11 @@ static const uint8_t REG_VOLTAGE   = 0x20; // 16-bit, 80 mV / LSB
 static const uint8_t REG_CURRENT   = 0x22; // 16-bit, 24 mA / LSB
 static const uint8_t REG_RDO       = 0x30; // 32-bit Request Data Object
 
-// PicoPD Pro I2C pins (verify on your board silkscreen)
-static const int PIN_SDA = 16;
-static const int PIN_SCL = 17;
+// PicoPD Pro I2C pins to AP33772S
+static const int PIN_SDA = 0;   // GPIO0  -> SDA
+static const int PIN_SCL = 1;   // GPIO1  -> SCL
+static const int PIN_EN  = 3;   // GPIO3  -> AP33772S enable / VBUS output enable
+                                //          MUST be driven HIGH to allow voltage output
 
 // ---------- I2C helpers ----------
 static bool i2cReadN(uint8_t reg, uint8_t *buf, size_t n) {
@@ -134,10 +136,19 @@ void setup() {
   uint32_t t0 = millis();
   while (!Serial && (millis() - t0) < 2000) { delay(10); }
 
+  // Enable VBUS output BEFORE talking to the PD controller.
+  // Without this, the AP33772S will ACK I2C writes but produce 0 V.
+  pinMode(PIN_EN, OUTPUT);
+  digitalWrite(PIN_EN, HIGH);
+  delay(5);
+
   Wire.setSDA(PIN_SDA);
   Wire.setSCL(PIN_SCL);
   Wire.begin();
   Wire.setClock(400000);
+
+  // Give the AP33772S a moment to come out of reset before the first RDO.
+  delay(50);
 
   // Default boot: request safe 5 V PPS
   requestPPS(g_targetV, g_targetI);
