@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Activity,
   AlertCircle,
+  AlertTriangle,
   BatteryCharging,
   CheckCircle2,
   ChevronDown,
@@ -12,6 +13,8 @@ import {
   Plug,
   PlugZap,
   Settings2,
+  ShieldAlert,
+  SlidersHorizontal,
   Usb,
   Zap,
 } from "lucide-react";
@@ -20,52 +23,146 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { useSerialTelemetry } from "@/hooks/useSerialTelemetry";
-import { DEVICES } from "@/data/devices";
+import {
+  DEVICES,
+  MANUAL_IDX,
+  MANUAL_MIN_V,
+  MANUAL_MAX_V,
+  MANUAL_STEP_V,
+  MANUAL_SAFETY_THRESHOLD_V,
+  MANUAL_SAFETY_HOLD_MS,
+} from "@/data/devices";
+
+const clampManual = (v: number) =>
+  Math.min(MANUAL_MAX_V, Math.max(MANUAL_MIN_V, Math.round(v * 10) / 10));
 
 const Index = () => {
   const { supported, status, error, telemetry, connect, disconnect, send } = useSerialTelemetry();
 
-  // Highlighted device under the OLED cursor (cycled by buttons).
   const [cursorIdx, setCursorIdx] = useState(0);
-  // Confirmed/active device — what the PicoPD is actually programmed to.
   const [activeIdx, setActiveIdx] = useState<number | null>(null);
+
+  // Manual-mode target voltage (only meaningful when manual mode is on cursor or active).
+  const [manualV, setManualV] = useState<number>(5.0);
+
+  // Safety hold-to-confirm progress (0..1) for manual voltages > 12V.
+  const [holdProgress, setHoldProgress] = useState(0);
+  const holdStartRef = useRef<number | null>(null);
+  const holdRafRef = useRef<number | null>(null);
 
   const cursorDevice = DEVICES[cursorIdx];
   const activeDevice = activeIdx !== null ? DEVICES[activeIdx] : null;
+  const isManualCursor = cursorIdx === MANUAL_IDX;
+  const isManualActive = activeIdx === MANUAL_IDX;
 
-  const liveV = telemetry?.v ?? activeDevice?.voltage ?? 0;
+  const liveV = telemetry?.v ?? (isManualActive ? manualV : activeDevice?.voltage ?? 0);
   const liveI = telemetry?.i ?? 0;
   const liveP = +(((telemetry?.p ?? liveV * liveI)) || 0).toFixed(2);
   const live = status === "connected" && telemetry !== null;
 
+  // PicoPD.requestPPS — thin wrapper that sends the PPS setVoltage command.
+  const requestPPS = useCallback(
+    (v: number) => {
+      void send({ cmd: "setMode", mode: "PPS" });
+      void send({ cmd: "setVoltage", v: +v.toFixed(2) });
+    },
+    [send],
+  );
+
   const cycle = (delta: 1 | -1) => {
+    // In manual mode the buttons retune voltage in 100mV steps and push PPS in real time.
+    if (isManualCursor && (isManualActive || activeIdx === null)) {
+      setManualV((prev) => {
+        const next = clampManual(prev + delta * MANUAL_STEP_V);
+        // Real-time PPS update only when manual mode is the active profile.
+        if (isManualActive && next <= MANUAL_SAFETY_THRESHOLD_V) {
+          requestPPS(next);
+        }
+        return next;
+      });
+      return;
+    }
     setCursorIdx((idx) => (idx + delta + DEVICES.length) % DEVICES.length);
   };
 
-  const confirmDevice = (idx: number) => {
-    const d = DEVICES[idx];
-    setCursorIdx(idx);
-    setActiveIdx(idx);
-    // Automatically send PPS request with the device's required V & I.
-    void send({ cmd: "setMode", mode: "PPS" });
-    void send({ cmd: "setVoltage", v: d.voltage });
-    // Reuse profile slot to also signal current limit downstream if firmware supports it.
-    void send({ cmd: "setProfile", idx });
-  };
+  const applyDevice = useCallback(
+    (idx: number) => {
+      const d = DEVICES[idx];
+      setCursorIdx(idx);
+      setActiveIdx(idx);
+      if (idx === MANUAL_IDX) {
+        requestPPS(manualV);
+        void send({ cmd: "setProfile", idx });
+      } else {
+        void send({ cmd: "setMode", mode: "PPS" });
+        void send({ cmd: "setVoltage", v: d.voltage });
+        void send({ cmd: "setProfile", idx });
+      }
+    },
+    [manualV, requestPPS, send],
+  );
 
-  // Keyboard shortcuts mirror the physical buttons (← → cycle, Enter confirm).
+  const needsSafetyHold =
+    isManualCursor && manualV > MANUAL_SAFETY_THRESHOLD_V;
+
+  const cancelHold = useCallback(() => {
+    holdStartRef.current = null;
+    if (holdRafRef.current != null) cancelAnimationFrame(holdRafRef.current);
+    holdRafRef.current = null;
+    setHoldProgress(0);
+  }, []);
+
+  const handleConfirmDown = useCallback(() => {
+    // Manual mode + over-threshold => require 2s hold.
+    if (needsSafetyHold) {
+      holdStartRef.current = performance.now();
+      const tick = () => {
+        if (holdStartRef.current == null) return;
+        const elapsed = performance.now() - holdStartRef.current;
+        const p = Math.min(1, elapsed / MANUAL_SAFETY_HOLD_MS);
+        setHoldProgress(p);
+        if (p >= 1) {
+          holdStartRef.current = null;
+          setHoldProgress(0);
+          // Apply: switch active to manual and push the high-voltage PPS request.
+          setActiveIdx(MANUAL_IDX);
+          setCursorIdx(MANUAL_IDX);
+          requestPPS(manualV);
+          void send({ cmd: "setProfile", idx: MANUAL_IDX });
+          return;
+        }
+        holdRafRef.current = requestAnimationFrame(tick);
+      };
+      holdRafRef.current = requestAnimationFrame(tick);
+      return;
+    }
+    // Safe path: instant confirm.
+    applyDevice(cursorIdx);
+  }, [applyDevice, cursorIdx, manualV, needsSafetyHold, requestPPS, send]);
+
+  // Keyboard shortcuts mirror the physical buttons (← → cycle/tune, Enter confirm).
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if (e.repeat) return;
       if (e.key === "ArrowDown" || e.key === "ArrowRight") cycle(1);
       else if (e.key === "ArrowUp" || e.key === "ArrowLeft") cycle(-1);
-      else if (e.key === "Enter") confirmDevice(cursorIdx);
+      else if (e.key === "Enter") handleConfirmDown();
+    };
+    const onKeyUp = (e: KeyboardEvent) => {
+      if (e.key === "Enter") cancelHold();
     };
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [cursorIdx]);
+    window.addEventListener("keyup", onKeyUp);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("keyup", onKeyUp);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cursorIdx, isManualCursor, isManualActive, manualV, needsSafetyHold]);
+
+  useEffect(() => () => cancelHold(), [cancelHold]);
 
   const oledList = useMemo(() => {
-    // Show 3 surrounding entries on the faux 128x64 OLED.
     const before = DEVICES[(cursorIdx - 1 + DEVICES.length) % DEVICES.length];
     const after = DEVICES[(cursorIdx + 1) % DEVICES.length];
     return { before, current: cursorDevice, after };
@@ -140,13 +237,13 @@ const Index = () => {
           </div>
         )}
 
-        {/* Top stats — now device-centric */}
+        {/* Top stats */}
         <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
           <StatCard
             label="Active Device"
-            value={activeDevice ? activeDevice.name : "—"}
+            value={activeDevice ? (isManualActive ? "Manual PPS" : activeDevice.name) : "—"}
             unit=""
-            icon={Music2}
+            icon={isManualActive ? SlidersHorizontal : Music2}
             accent="primary"
           />
           <StatCard label="Live Voltage" value={liveV.toFixed(2)} unit="V" icon={Zap} accent="accent" />
@@ -156,7 +253,6 @@ const Index = () => {
 
         {/* Main grid */}
         <div className="grid gap-6 lg:grid-cols-3">
-          {/* OLED preview + controls */}
           <Card className="lg:col-span-2 overflow-hidden border-border/60 bg-[var(--gradient-card)] p-6 shadow-[var(--shadow-card)]">
             <div className="mb-4 flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -168,26 +264,46 @@ const Index = () => {
               <Badge variant="outline" className="border-primary/40 text-primary">I2C 0x3C</Badge>
             </div>
 
-            {/* Faux OLED display — device-centric layout */}
+            {/* Faux OLED display */}
             <div className="relative mx-auto aspect-[2/1] w-full max-w-md overflow-hidden rounded-lg border border-primary/30 bg-black p-4 shadow-[var(--shadow-elevated)]">
               <div className="absolute inset-0 oled-grid opacity-50" />
               <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-primary to-transparent animate-scan" />
               <div className="relative flex h-full flex-col justify-between font-mono text-primary">
                 <div className="flex items-baseline justify-between text-[10px] opacity-70">
-                  <span>DEVICE SELECT</span>
+                  <span className="flex items-center gap-1">
+                    {isManualCursor && <ShieldAlert className="h-3 w-3" />}
+                    {isManualCursor ? "MANUAL PPS" : "DEVICE SELECT"}
+                  </span>
                   <span>{activeDevice ? "● ACTIVE" : "○ IDLE"}</span>
                 </div>
 
-                <div className="flex flex-col items-center leading-tight">
-                  <div className="text-[10px] opacity-40 truncate">{oledList.before.name}</div>
-                  <div className="text-2xl font-extrabold tracking-tight drop-shadow-[0_0_8px_hsl(var(--primary))] truncate">
-                    ▸ {oledList.current.name}
+                {isManualCursor ? (
+                  <div className="flex flex-col items-center leading-tight">
+                    <div className="flex items-center gap-2 text-[10px] opacity-70">
+                      <AlertTriangle className="h-3 w-3" />
+                      <span>MANUAL · ±100 mV</span>
+                    </div>
+                    <div className="text-4xl font-extrabold tracking-tight tabular-nums drop-shadow-[0_0_8px_hsl(var(--primary))]">
+                      {manualV.toFixed(2).padStart(5, "0")}V
+                    </div>
+                    <div className={`text-[10px] ${manualV > MANUAL_SAFETY_THRESHOLD_V ? "text-warning" : "opacity-60"}`}>
+                      {manualV > MANUAL_SAFETY_THRESHOLD_V
+                        ? "⚠ HOLD CONFIRM 2s"
+                        : `range ${MANUAL_MIN_V.toFixed(1)}–${MANUAL_MAX_V.toFixed(1)}V`}
+                    </div>
                   </div>
-                  <div className="text-[10px] opacity-60">
-                    {oledList.current.voltage.toFixed(1)}V · {oledList.current.current.toFixed(2)}A · {oledList.current.defaultPolarity === "center-positive" ? "C+" : "C−"}
+                ) : (
+                  <div className="flex flex-col items-center leading-tight">
+                    <div className="text-[10px] opacity-40 truncate">{oledList.before.name}</div>
+                    <div className="text-2xl font-extrabold tracking-tight drop-shadow-[0_0_8px_hsl(var(--primary))] truncate">
+                      ▸ {oledList.current.name}
+                    </div>
+                    <div className="text-[10px] opacity-60">
+                      {oledList.current.voltage.toFixed(1)}V · {oledList.current.current.toFixed(2)}A · {oledList.current.defaultPolarity === "center-positive" ? "C+" : "C−"}
+                    </div>
+                    <div className="text-[10px] opacity-40 truncate">{oledList.after.name}</div>
                   </div>
-                  <div className="text-[10px] opacity-40 truncate">{oledList.after.name}</div>
-                </div>
+                )}
 
                 <div className="flex items-center justify-between text-[10px] opacity-70">
                   <span>{liveV.toFixed(2)}V</span>
@@ -197,21 +313,44 @@ const Index = () => {
               </div>
             </div>
 
-            {/* Controls — emulate physical buttons */}
+            {/* Controls */}
             <div className="mt-6 grid gap-4 sm:grid-cols-3">
               <Button variant="outline" onClick={() => cycle(-1)} className="h-14 gap-2">
-                <ChevronUp className="h-4 w-4" /> Prev
+                <ChevronUp className="h-4 w-4" />
+                {isManualCursor ? "−100 mV" : "Prev"}
               </Button>
-              <Button onClick={() => confirmDevice(cursorIdx)} className="h-14 gap-2">
-                <CheckCircle2 className="h-4 w-4" /> Confirm
+              <Button
+                onClick={() => { if (!needsSafetyHold) handleConfirmDown(); }}
+                onMouseDown={() => { if (needsSafetyHold) handleConfirmDown(); }}
+                onMouseUp={cancelHold}
+                onMouseLeave={cancelHold}
+                onTouchStart={() => { if (needsSafetyHold) handleConfirmDown(); }}
+                onTouchEnd={cancelHold}
+                className={`relative h-14 gap-2 overflow-hidden ${needsSafetyHold ? "bg-warning text-warning-foreground hover:bg-warning/90" : ""}`}
+              >
+                {needsSafetyHold && (
+                  <span
+                    className="absolute inset-y-0 left-0 bg-destructive/40"
+                    style={{ width: `${holdProgress * 100}%` }}
+                  />
+                )}
+                <span className="relative flex items-center gap-2">
+                  {needsSafetyHold ? <ShieldAlert className="h-4 w-4" /> : <CheckCircle2 className="h-4 w-4" />}
+                  {needsSafetyHold ? "Hold 2s" : "Confirm"}
+                </span>
               </Button>
               <Button variant="outline" onClick={() => cycle(1)} className="h-14 gap-2">
-                <ChevronDown className="h-4 w-4" /> Next
+                <ChevronDown className="h-4 w-4" />
+                {isManualCursor ? "+100 mV" : "Next"}
               </Button>
             </div>
 
             <p className="mt-3 text-center text-xs text-muted-foreground">
-              Buttons cycle the device list. Confirm sends a PPS request at {cursorDevice.voltage.toFixed(1)}V / {cursorDevice.current.toFixed(2)}A.
+              {isManualCursor
+                ? `Manual PPS · target ${manualV.toFixed(2)}V${
+                    manualV > MANUAL_SAFETY_THRESHOLD_V ? " · safety lock active (>12V)" : " · live retune"
+                  }`
+                : `Buttons cycle the device list. Confirm sends a PPS request at ${cursorDevice.voltage.toFixed(1)}V / ${cursorDevice.current.toFixed(2)}A.`}
             </p>
           </Card>
 
@@ -227,10 +366,15 @@ const Index = () => {
               {DEVICES.map((d, i) => {
                 const isCursor = i === cursorIdx;
                 const isActive = i === activeIdx;
+                const manual = i === MANUAL_IDX;
                 return (
                   <button
                     key={d.name}
-                    onClick={() => confirmDevice(i)}
+                    onClick={() => {
+                      setCursorIdx(i);
+                      // Don't auto-apply manual mode from the list — needs explicit confirm (and possibly hold).
+                      if (!manual) applyDevice(i);
+                    }}
                     onMouseEnter={() => setCursorIdx(i)}
                     className={`flex w-full items-center justify-between rounded-lg border p-3 text-left transition-[var(--transition-smooth)] ${
                       isActive
@@ -241,13 +385,18 @@ const Index = () => {
                     }`}
                   >
                     <div className="flex items-center gap-3">
-                      <div className={`flex h-8 w-8 items-center justify-center rounded-md ${isActive ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"}`}>
-                        <Music2 className="h-4 w-4" />
+                      <div className={`flex h-8 w-8 items-center justify-center rounded-md ${isActive ? "bg-primary text-primary-foreground" : manual ? "bg-warning/20 text-warning" : "bg-muted text-muted-foreground"}`}>
+                        {manual ? <SlidersHorizontal className="h-4 w-4" /> : <Music2 className="h-4 w-4" />}
                       </div>
                       <div>
-                        <div className="font-semibold leading-tight">{d.name}</div>
+                        <div className="font-semibold leading-tight flex items-center gap-1.5">
+                          {d.name}
+                          {manual && <ShieldAlert className="h-3 w-3 text-warning" />}
+                        </div>
                         <div className="text-xs text-muted-foreground">
-                          {d.voltage.toFixed(1)}V · {d.current.toFixed(2)}A · {d.defaultPolarity === "center-positive" ? "C+" : "C−"}
+                          {manual
+                            ? `${MANUAL_MIN_V.toFixed(1)}–${MANUAL_MAX_V.toFixed(1)}V · 100 mV steps`
+                            : `${d.voltage.toFixed(1)}V · ${d.current.toFixed(2)}A · ${d.defaultPolarity === "center-positive" ? "C+" : "C−"}`}
                         </div>
                       </div>
                     </div>
@@ -282,13 +431,16 @@ const Index = () => {
                 <div className="flex items-center justify-between rounded-lg border border-primary/30 bg-primary/5 p-4">
                   <div>
                     <div className="text-xs uppercase tracking-wider text-muted-foreground">Powering</div>
-                    <div className="text-xl font-bold">{activeDevice.name}</div>
+                    <div className="text-xl font-bold flex items-center gap-2">
+                      {isManualActive ? "Manual PPS" : activeDevice.name}
+                      {isManualActive && <ShieldAlert className="h-4 w-4 text-warning" />}
+                    </div>
                     {activeDevice.brand && <div className="text-xs text-muted-foreground">{activeDevice.brand}</div>}
                   </div>
-                  <Settings2 className="h-5 w-5 text-primary" />
+                  {isManualActive ? <SlidersHorizontal className="h-5 w-5 text-warning" /> : <Settings2 className="h-5 w-5 text-primary" />}
                 </div>
                 <div className="grid grid-cols-3 gap-2 text-center">
-                  <MiniStat label="Target V" value={`${activeDevice.voltage.toFixed(2)}V`} />
+                  <MiniStat label="Target V" value={`${(isManualActive ? manualV : activeDevice.voltage).toFixed(2)}V`} />
                   <MiniStat label="Max I" value={`${activeDevice.current.toFixed(2)}A`} />
                   <MiniStat label="Polarity" value={activeDevice.defaultPolarity === "center-positive" ? "C+" : "C−"} />
                 </div>
