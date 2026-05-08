@@ -2,50 +2,53 @@
 @tailwind components;
 @tailwind utilities;
 
+/* myVolts brand — Laboratory White light theme with Orange + Power Green accents. */
 @layer base {
   :root {
-    --background: 222 47% 5%;
-    --foreground: 180 15% 92%;
+    /* Surfaces */
+    --background: 0 0% 98%;          /* Laboratory White */
+    --foreground: 215 28% 17%;       /* Deep Slate */
 
-    --card: 222 40% 8%;
-    --card-foreground: 180 15% 92%;
+    --card: 0 0% 100%;
+    --card-foreground: 215 28% 17%;
 
-    --popover: 222 40% 8%;
-    --popover-foreground: 180 15% 92%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 215 28% 17%;
 
-    --primary: 165 95% 50%;
-    --primary-foreground: 222 47% 5%;
-    --primary-glow: 165 100% 65%;
+    --muted: 220 14% 94%;            /* Technical Grey light */
+    --muted-foreground: 215 14% 42%; /* Technical Grey */
 
-    --secondary: 217 50% 14%;
-    --secondary-foreground: 180 15% 92%;
+    --secondary: 220 14% 96%;
+    --secondary-foreground: 215 28% 17%;
 
-    --muted: 217 30% 12%;
-    --muted-foreground: 215 15% 60%;
+    --border: 220 13% 88%;
+    --input: 220 13% 88%;
 
-    --accent: 195 100% 55%;
-    --accent-foreground: 222 47% 5%;
+    /* Brand */
+    --primary: 22 95% 54%;           /* myVolts Orange */
+    --primary-foreground: 0 0% 100%;
+    --primary-glow: 22 100% 64%;
 
-    --warning: 38 95% 60%;
-    --success: 142 75% 50%;
-    --destructive: 0 85% 60%;
-    --destructive-foreground: 180 15% 92%;
+    --accent: 22 95% 54%;            /* mirror primary for orange accents */
+    --accent-foreground: 0 0% 100%;
 
-    --border: 217 30% 16%;
-    --input: 217 30% 16%;
-    --ring: 165 95% 50%;
+    --success: 142 70% 40%;          /* Power Green */
+    --success-foreground: 0 0% 100%;
+    --warning: 38 95% 50%;
+    --destructive: 0 78% 52%;
+    --destructive-foreground: 0 0% 100%;
 
-    --radius: 0.75rem;
+    --ring: 22 95% 54%;
+    --radius: 0.875rem;
 
-    --gradient-primary: linear-gradient(135deg, hsl(165 95% 50%), hsl(195 100% 55%));
-    --gradient-card: linear-gradient(145deg, hsl(222 40% 9%), hsl(222 45% 6%));
-    --gradient-glow: radial-gradient(circle at 50% 0%, hsl(165 95% 50% / 0.15), transparent 70%);
+    --gradient-primary: linear-gradient(135deg, hsl(22 95% 54%), hsl(14 95% 58%));
+    --gradient-card: linear-gradient(180deg, hsl(0 0% 100%), hsl(220 14% 98%));
 
-    --shadow-glow: 0 0 40px hsl(165 95% 50% / 0.25);
-    --shadow-card: 0 4px 24px -4px hsl(222 60% 2% / 0.6);
-    --shadow-elevated: 0 20px 60px -20px hsl(165 95% 50% / 0.3);
+    --shadow-hw: 0 1px 0 hsl(0 0% 100%) inset, 0 1px 2px hsl(215 28% 17% / 0.08), 0 4px 12px -4px hsl(215 28% 17% / 0.12);
+    --shadow-card: 0 1px 0 hsl(0 0% 100%) inset, 0 1px 2px hsl(215 28% 17% / 0.06), 0 8px 24px -16px hsl(215 28% 17% / 0.18);
+    --shadow-inset: inset 0 2px 6px hsl(215 28% 17% / 0.10);
 
-    --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    --transition-smooth: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   }
 }
 
@@ -53,49 +56,56 @@
   * {
     @apply border-border;
   }
-
+  html, body {
+    font-family: 'Inter', 'Helvetica Neue', system-ui, -apple-system, sans-serif;
+    font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+  }
   body {
-    @apply bg-background text-foreground font-sans antialiased;
-    background-image: var(--gradient-glow);
-    background-attachment: fixed;
+    @apply bg-background text-foreground antialiased;
   }
 }
 
 @layer utilities {
-  .glass {
-    background: hsl(222 40% 9% / 0.6);
-    backdrop-filter: blur(12px);
-    border: 1px solid hsl(217 30% 18% / 0.6);
+  .font-mono-tech {
+    font-family: 'JetBrains Mono', 'SF Mono', ui-monospace, Menlo, monospace;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.02em;
   }
 
-  .text-gradient {
-    background: var(--gradient-primary);
-    -webkit-background-clip: text;
-    background-clip: text;
-    color: transparent;
+  /* Tactile hardware button look */
+  .hw-btn {
+    background: linear-gradient(180deg, hsl(0 0% 100%), hsl(220 14% 96%));
+    box-shadow: var(--shadow-hw);
+    border: 1px solid hsl(var(--border));
+    transition: var(--transition-smooth);
+  }
+  .hw-btn:hover { background: linear-gradient(180deg, hsl(0 0% 100%), hsl(220 14% 94%)); }
+  .hw-btn:active { box-shadow: var(--shadow-inset); transform: translateY(1px); }
+
+  .hw-btn-primary {
+    background: linear-gradient(180deg, hsl(22 100% 60%), hsl(22 95% 50%));
+    color: hsl(var(--primary-foreground));
+    border: 1px solid hsl(22 95% 44%);
+    box-shadow: 0 1px 0 hsl(0 0% 100% / 0.3) inset, 0 1px 2px hsl(22 95% 30% / 0.25), 0 6px 14px -6px hsl(22 95% 50% / 0.55);
   }
 
-  .glow-border {
-    box-shadow: 0 0 0 1px hsl(var(--primary) / 0.3), var(--shadow-glow);
+  .readout {
+    background: hsl(215 28% 12%);
+    color: hsl(22 100% 64%);
+    border-radius: calc(var(--radius) - 2px);
+    box-shadow: var(--shadow-inset), 0 0 0 1px hsl(215 28% 8%);
   }
 
-  .oled-grid {
-    background-image:
-      linear-gradient(hsl(var(--primary) / 0.08) 1px, transparent 1px),
-      linear-gradient(90deg, hsl(var(--primary) / 0.08) 1px, transparent 1px);
-    background-size: 12px 12px;
+  .panel {
+    background: var(--gradient-card);
+    border: 1px solid hsl(var(--border));
+    box-shadow: var(--shadow-card);
+    border-radius: var(--radius);
   }
 }
 
-@keyframes pulse-glow {
-  0%, 100% { opacity: 1; box-shadow: 0 0 0 0 hsl(var(--primary) / 0.5); }
-  50% { opacity: 0.85; box-shadow: 0 0 0 8px hsl(var(--primary) / 0); }
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
 }
-
-@keyframes scan {
-  0% { transform: translateY(-100%); }
-  100% { transform: translateY(100%); }
-}
-
-.animate-pulse-glow { animation: pulse-glow 2s ease-in-out infinite; }
-.animate-scan { animation: scan 3s linear infinite; }
+.animate-pulse-dot { animation: pulse-dot 1.6s ease-in-out infinite; }
