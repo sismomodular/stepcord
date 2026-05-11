@@ -21,10 +21,13 @@
 static const uint8_t AP33772S_ADDR = 0x51;
 
 // Register map (subset – check datasheet for full list)
-static const uint8_t REG_STATUS    = 0x01;
-static const uint8_t REG_VOLTAGE   = 0x20; // 16-bit, 80 mV / LSB
-static const uint8_t REG_CURRENT   = 0x22; // 16-bit, 24 mA / LSB
+static const uint8_t REG_STATUS    = 0x01; // bit0 = "ready / contract established"
+static const uint8_t REG_VOLTAGE   = 0x20; // 16-bit, 80 mV / LSB  (internal ADC of VBUS)
+static const uint8_t REG_CURRENT   = 0x22; // 16-bit, 24 mA / LSB  (internal ADC of IBUS)
 static const uint8_t REG_RDO       = 0x30; // 32-bit Request Data Object
+
+// Negotiation timeout — how long to wait for the AP33772S to confirm a contract
+static const uint32_t PD_NEGOTIATE_TIMEOUT_MS = 400;
 
 // PicoPD Pro I2C pins to AP33772S
 static const int PIN_SDA = 0;   // GPIO0  -> SDA
