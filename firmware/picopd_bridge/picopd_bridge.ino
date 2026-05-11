@@ -1,234 +1,564 @@
-// PicoPD Pro <-> Dashboard bridge
+// =============================================================================
+// PicoPD Pro – Smart USB-C PD Controller
 // Board:  Raspberry Pi Pico (arduino-pico core by earlephilhower)
-// USB Stack: Adafruit TinyUSB  (Tools menu) -- this is what creates the COM port
-// Upload: drag-drop UF2 while in BOOTSEL, or click Upload in IDE
+// USB Stack: Adafruit TinyUSB (creates the USB CDC COM port)
 //
-// Wire protocol (line-delimited JSON, 115200 8N1, \n terminated)
+// Hybrid UI:  USB Serial JSON  +  SSD1306 OLED  +  Rotary encoder w/ button
 //
-//   Device -> Host (telemetry @ ~10 Hz):
-//     {"v":9.01,"i":1.42,"p":12.79,"mode":"PPS","profile":1}
+// Hardware
+//   AP33772S  PD sink controller   I2C @ 0x51
+//   SSD1306   128x64 OLED          I2C @ 0x3C
+//   Rotary encoder + push button
 //
-//   Host -> Device (commands):
-//     {"cmd":"setMode","mode":"PD"}              or "PPS"
-//     {"cmd":"setVoltage","v":9.00}              // PPS only
-//     {"cmd":"setProfile","idx":0}               // fixed PDO index
+// Pin map
+//   GPIO0  SDA            GPIO6  Encoder CLK (A)
+//   GPIO1  SCL            GPIO7  Encoder DT  (B)
+//   GPIO3  VBUS Enable    GPIO8  Encoder SW  (button)
+//
+// Serial JSON commands (line-delimited, 115200 8N1, '\n' terminated)
+//   { "select": "MacBook Air" }
+//   { "set": "pps", "v": 12.0, "i": 2.0 }
+//   { "set": "fixed", "v": 9.0, "i": 2.0 }
+//   { "output": "on" }   |   { "output": "off" }
+//
+// Telemetry @ ~5 Hz:
+//   {"v":9.01,"i":1.42,"p":12.79,"mode":"PPS","profile":"Pedalboard",
+//    "en":true,"err":""}
+// =============================================================================
 
 #include <Arduino.h>
 #include <Wire.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
 
-// ---- AP33772S (USB-PD sink controller on PicoPD Pro) ----
-// I2C address per AP33772S datasheet (PicoPD Pro uses 0x51)
-static const uint8_t AP33772S_ADDR = 0x51;
+// =============================================================================
+// PIN MAP
+// =============================================================================
+static const int PIN_SDA = 0;
+static const int PIN_SCL = 1;
+static const int PIN_EN  = 3;   // VBUS output gate – HIGH = output enabled
+static const int PIN_ENC_A  = 6;
+static const int PIN_ENC_B  = 7;
+static const int PIN_ENC_SW = 8;
 
-// Register map (subset – check datasheet for full list)
-static const uint8_t REG_STATUS    = 0x01; // bit0 = "ready / contract established"
-static const uint8_t REG_VOLTAGE   = 0x20; // 16-bit, 80 mV / LSB  (internal ADC of VBUS)
-static const uint8_t REG_CURRENT   = 0x22; // 16-bit, 24 mA / LSB  (internal ADC of IBUS)
-static const uint8_t REG_RDO       = 0x30; // 32-bit Request Data Object
+// =============================================================================
+// AP33772S (USB-PD sink)  — I2C @ 0x51
+// =============================================================================
+namespace PDController {
+  static const uint8_t  ADDR             = 0x51;
+  static const uint8_t  REG_STATUS       = 0x01; // bit0 = contract established
+  static const uint8_t  REG_VOLTAGE      = 0x20; // u16, 80 mV / LSB
+  static const uint8_t  REG_CURRENT      = 0x22; // u16, 24 mA / LSB
+  static const uint8_t  REG_RDO          = 0x30; // u32 Request Data Object
+  static const uint32_t NEGOTIATE_TIMEOUT_MS = 1000;
 
-// Negotiation timeout — how long to wait for the AP33772S to confirm a contract
-static const uint32_t PD_NEGOTIATE_TIMEOUT_MS = 400;
+  static bool present = false;
 
-// PicoPD Pro I2C pins to AP33772S
-static const int PIN_SDA = 0;   // GPIO0  -> SDA
-static const int PIN_SCL = 1;   // GPIO1  -> SCL
-static const int PIN_EN  = 3;   // GPIO3  -> AP33772S enable / VBUS output enable
-                                //          MUST be driven HIGH to allow voltage output
-
-// ---------- I2C helpers ----------
-static bool i2cReadN(uint8_t reg, uint8_t *buf, size_t n) {
-  Wire.beginTransmission(AP33772S_ADDR);
-  Wire.write(reg);
-  if (Wire.endTransmission(false) != 0) return false;
-  size_t got = Wire.requestFrom((int)AP33772S_ADDR, (int)n);
-  if (got != n) return false;
-  for (size_t i = 0; i < n; i++) buf[i] = Wire.read();
-  return true;
-}
-
-static bool i2cWriteN(uint8_t reg, const uint8_t *buf, size_t n) {
-  Wire.beginTransmission(AP33772S_ADDR);
-  Wire.write(reg);
-  for (size_t i = 0; i < n; i++) Wire.write(buf[i]);
-  return Wire.endTransmission() == 0;
-}
-
-// ---------- Telemetry ----------
-static float readVoltage() {
-  uint8_t b[2] = {0};
-  if (!i2cReadN(REG_VOLTAGE, b, 2)) return 0.0f;
-  uint16_t raw = (uint16_t)b[0] | ((uint16_t)b[1] << 8);
-  return raw * 0.080f; // 80 mV / LSB
-}
-
-static float readCurrent() {
-  uint8_t b[2] = {0};
-  if (!i2cReadN(REG_CURRENT, b, 2)) return 0.0f;
-  uint16_t raw = (uint16_t)b[0] | ((uint16_t)b[1] << 8);
-  return raw * 0.024f; // 24 mA / LSB
-}
-
-// ---------- Power gate (GPIO3) ----------
-// The VBUS output is gated by GPIO3. Even if the AP33772S negotiates a
-// contract, no voltage reaches the barrel jack until GPIO3 is driven HIGH.
-// We keep it LOW until a contract is *confirmed*, and drop it on any error
-// or cable removal so a 9 V pedal never sees an unexpected rail.
-static bool g_outputEnabled = false;
-
-static void powerGate(bool on) {
-  digitalWrite(PIN_EN, on ? HIGH : LOW);
-  g_outputEnabled = on;
-}
-
-// Poll AP33772S STATUS register until the "contract established" bit is set,
-// or we time out. Returns true on success.
-static bool waitForContract(uint32_t timeout_ms) {
-  uint32_t t0 = millis();
-  while (millis() - t0 < timeout_ms) {
-    uint8_t st = 0;
-    if (i2cReadN(REG_STATUS, &st, 1) && (st & 0x01)) return true;
-    delay(5);
+  static bool readN(uint8_t reg, uint8_t* buf, size_t n) {
+    Wire.beginTransmission(ADDR);
+    Wire.write(reg);
+    if (Wire.endTransmission(false) != 0) return false;
+    if (Wire.requestFrom((int)ADDR, (int)n) != (int)n) return false;
+    for (size_t i = 0; i < n; i++) buf[i] = Wire.read();
+    return true;
   }
-  return false;
-}
-
-// ---------- Power requests ----------
-// Build a PPS RDO. See USB-PD spec 6.4.2.5; AP33772S issues this on write.
-// Returns true if the sink confirmed the contract; only then is VBUS gated on.
-static bool requestPPS(float volts, float amps) {
-  // Voltage: 20 mV/LSB,  Current: 50 mA/LSB
-  uint16_t vRaw = (uint16_t)((volts * 1000.0f) / 20.0f);
-  uint16_t iRaw = (uint16_t)((amps  * 1000.0f) / 50.0f);
-  uint32_t rdo = 0;
-  rdo |= ((uint32_t)1 & 0x7) << 28;     // Object position (APDO slot 1)
-  rdo |= ((uint32_t)vRaw & 0xFFF) << 9; // Output voltage
-  rdo |= ((uint32_t)iRaw & 0x7F);       // Operating current
-  uint8_t b[4] = { (uint8_t)rdo, (uint8_t)(rdo>>8), (uint8_t)(rdo>>16), (uint8_t)(rdo>>24) };
-
-  powerGate(false);                     // close gate during renegotiation
-  if (!i2cWriteN(REG_RDO, b, 4))     return false;
-  if (!waitForContract(PD_NEGOTIATE_TIMEOUT_MS)) return false;
-  powerGate(true);                      // contract confirmed -> open gate
-  return true;
-}
-
-static bool requestFixedPDO(uint8_t idx) {
-  uint32_t rdo = ((uint32_t)(idx + 1) & 0x7) << 28; // object position 1..7
-  uint8_t b[4] = { (uint8_t)rdo, (uint8_t)(rdo>>8), (uint8_t)(rdo>>16), (uint8_t)(rdo>>24) };
-
-  powerGate(false);
-  if (!i2cWriteN(REG_RDO, b, 4))     return false;
-  if (!waitForContract(PD_NEGOTIATE_TIMEOUT_MS)) return false;
-  powerGate(true);
-  return true;
-}
-
-// ---------- Command parsing (tiny, no JSON lib) ----------
-static String rxBuf;
-static const char* g_mode = "PPS";
-static int   g_profile   = 1;
-static float g_targetV   = 9.0f;
-static float g_targetI   = 3.0f;
-
-static bool extractStr(const String& s, const char* key, String& out) {
-  int k = s.indexOf(String("\"") + key + "\"");
-  if (k < 0) return false;
-  int q1 = s.indexOf('"', k + (int)strlen(key) + 2);
-  int q2 = s.indexOf('"', q1 + 1);
-  if (q1 < 0 || q2 < 0) return false;
-  out = s.substring(q1 + 1, q2);
-  return true;
-}
-static bool extractNum(const String& s, const char* key, float& out) {
-  int k = s.indexOf(String("\"") + key + "\"");
-  if (k < 0) return false;
-  int c = s.indexOf(':', k);
-  if (c < 0) return false;
-  int i = c + 1;
-  while (i < (int)s.length() && (s[i] == ' ' || s[i] == '\t')) i++;
-  int j = i;
-  while (j < (int)s.length() && (isdigit(s[j]) || s[j]=='.' || s[j]=='-' || s[j]=='+')) j++;
-  if (j == i) return false;
-  out = s.substring(i, j).toFloat();
-  return true;
-}
-
-static void handleLine(const String& line) {
-  String cmd, mode;
-  if (!extractStr(line, "cmd", cmd)) return;
-  bool ok = true;
-  if (cmd == "setMode" && extractStr(line, "mode", mode)) {
-    if (mode == "PD")  { g_mode = "PD";  ok = requestFixedPDO(g_profile); }
-    if (mode == "PPS") { g_mode = "PPS"; ok = requestPPS(g_targetV, g_targetI); }
-  } else if (cmd == "setVoltage") {
-    float v; if (extractNum(line, "v", v)) { g_targetV = v; ok = requestPPS(g_targetV, g_targetI); }
-  } else if (cmd == "setProfile") {
-    float idx; if (extractNum(line, "idx", idx)) { g_profile = (int)idx; ok = requestFixedPDO(g_profile); }
+  static bool writeN(uint8_t reg, const uint8_t* buf, size_t n) {
+    Wire.beginTransmission(ADDR);
+    Wire.write(reg);
+    for (size_t i = 0; i < n; i++) Wire.write(buf[i]);
+    return Wire.endTransmission() == 0;
   }
-  // Negotiation failure -> safety-close the gate so a pedal never sees a
-  // half-configured rail.
-  if (!ok) powerGate(false);
+
+  bool detect() {
+    Wire.beginTransmission(ADDR);
+    present = (Wire.endTransmission() == 0);
+    return present;
+  }
+
+  float readVoltage() {
+    uint8_t b[2] = {0};
+    if (!readN(REG_VOLTAGE, b, 2)) return 0.0f;
+    uint16_t raw = (uint16_t)b[0] | ((uint16_t)b[1] << 8);
+    return raw * 0.080f;
+  }
+  float readCurrent() {
+    uint8_t b[2] = {0};
+    if (!readN(REG_CURRENT, b, 2)) return 0.0f;
+    uint16_t raw = (uint16_t)b[0] | ((uint16_t)b[1] << 8);
+    return raw * 0.024f;
+  }
+
+  // Non-blocking-ish: short polled wait with yields to keep loop responsive.
+  static bool waitForContract(uint32_t timeout_ms) {
+    uint32_t t0 = millis();
+    while (millis() - t0 < timeout_ms) {
+      uint8_t st = 0;
+      if (readN(REG_STATUS, &st, 1) && (st & 0x01)) return true;
+      yield();
+    }
+    return false;
+  }
+
+  // VBUS gate (GPIO3). Drive LOW until a contract is *confirmed*.
+  static bool g_outputEnabled = false;
+  void powerGate(bool on) {
+    digitalWrite(PIN_EN, on ? HIGH : LOW);
+    g_outputEnabled = on;
+  }
+  bool outputEnabled() { return g_outputEnabled; }
+
+  bool requestPPS(float volts, float amps) {
+    if (!present) return false;
+    uint16_t vRaw = (uint16_t)((volts * 1000.0f) / 20.0f);  // 20 mV/LSB
+    uint16_t iRaw = (uint16_t)((amps  * 1000.0f) / 50.0f);  // 50 mA/LSB
+    uint32_t rdo = 0;
+    rdo |= ((uint32_t)1 & 0x7) << 28;       // APDO slot 1
+    rdo |= ((uint32_t)vRaw & 0xFFF) << 9;
+    rdo |= ((uint32_t)iRaw & 0x7F);
+    uint8_t b[4] = {(uint8_t)rdo, (uint8_t)(rdo>>8),
+                    (uint8_t)(rdo>>16), (uint8_t)(rdo>>24)};
+    powerGate(false);
+    if (!writeN(REG_RDO, b, 4))                    return false;
+    if (!waitForContract(NEGOTIATE_TIMEOUT_MS))    return false;
+    powerGate(true);
+    return true;
+  }
+  bool requestFixed(float volts, float amps) {
+    // Pick PDO slot by voltage. AP33772S exposes the source PDOs in slots
+    // 1..7; we approximate by mapping common voltages to typical slot order.
+    if (!present) return false;
+    uint8_t slot = 1;          // 5V default
+    if (volts >= 19.0f)      slot = 4;   // 20V
+    else if (volts >= 14.0f) slot = 3;   // 15V
+    else if (volts >= 8.0f)  slot = 2;   // 9V / 12V
+    uint32_t rdo = ((uint32_t)slot & 0x7) << 28;
+    uint8_t b[4] = {(uint8_t)rdo, (uint8_t)(rdo>>8),
+                    (uint8_t)(rdo>>16), (uint8_t)(rdo>>24)};
+    powerGate(false);
+    if (!writeN(REG_RDO, b, 4))                    return false;
+    if (!waitForContract(NEGOTIATE_TIMEOUT_MS))    return false;
+    powerGate(true);
+    (void)amps;
+    return true;
+  }
 }
 
-// ---------- Setup / loop ----------
+// =============================================================================
+// PROFILE DATABASE
+// =============================================================================
+namespace ProfileManager {
+  struct DeviceProfile {
+    const char* name;
+    float voltage;
+    float current;
+    bool  usePPS;
+  };
+
+  static const DeviceProfile PROFILES[] = {
+    {"Safe 5V",            5.0f, 1.0f, false},
+    {"iPhone Fast Charge", 9.0f, 2.0f, false},
+    {"iPad Pro",           9.0f, 2.2f, false},
+    {"MacBook Air",       20.0f, 3.0f, false},
+    {"USB-C Synth Module",12.0f, 1.5f, true },
+    {"Pedalboard",         9.0f, 1.0f, true },
+  };
+  static const uint8_t COUNT = sizeof(PROFILES) / sizeof(PROFILES[0]);
+
+  const DeviceProfile& get(uint8_t i) { return PROFILES[i % COUNT]; }
+  uint8_t count() { return COUNT; }
+
+  int findByName(const char* name) {
+    for (uint8_t i = 0; i < COUNT; i++) {
+      if (strcasecmp(PROFILES[i].name, name) == 0) return i;
+    }
+    return -1;
+  }
+}
+
+// =============================================================================
+// SYSTEM STATE
+// =============================================================================
+namespace SystemState {
+  uint8_t  selectedIdx   = 0;   // highlighted in menu
+  uint8_t  activeIdx     = 0;   // currently applied profile
+  float    liveV         = 0.0f;
+  float    liveI         = 0.0f;
+  float    liveVAvg      = 0.0f; // smoothed
+  bool     outputOn      = false;
+  char     errMsg[24]    = {0};
+
+  void setError(const char* msg) {
+    strncpy(errMsg, msg ? msg : "", sizeof(errMsg) - 1);
+    errMsg[sizeof(errMsg) - 1] = 0;
+  }
+  void clearError() { errMsg[0] = 0; }
+}
+
+// =============================================================================
+// PROFILE APPLICATION (shared by encoder + serial)
+// =============================================================================
+static bool applyProfile(uint8_t idx) {
+  const auto& p = ProfileManager::get(idx);
+  bool ok = p.usePPS ? PDController::requestPPS(p.voltage, p.current)
+                     : PDController::requestFixed(p.voltage, p.current);
+  if (ok) {
+    SystemState::activeIdx = idx;
+    SystemState::outputOn  = true;
+    SystemState::clearError();
+  } else {
+    PDController::powerGate(false);
+    SystemState::outputOn = false;
+    SystemState::setError("PD FAIL -> 5V");
+    // Fallback: try Safe 5V (idx 0).
+    const auto& s = ProfileManager::get(0);
+    if (PDController::requestFixed(s.voltage, s.current)) {
+      SystemState::activeIdx = 0;
+      SystemState::outputOn  = true;
+    }
+  }
+  return ok;
+}
+
+// =============================================================================
+// INPUT HANDLER – rotary encoder + push button
+// =============================================================================
+namespace InputHandler {
+  static uint8_t  lastAB     = 0;
+  static int8_t   accum      = 0;
+  static bool     btnLast    = true;     // pulled-up = released
+  static uint32_t btnDownAt  = 0;
+  static bool     longFired  = false;
+
+  static const uint32_t LONG_PRESS_MS = 700;
+  static const uint32_t DEBOUNCE_MS   = 5;
+  static uint32_t       lastBtnEdge   = 0;
+
+  // Quadrature decode lookup: index = (lastAB<<2 | newAB) -> -1/0/+1
+  static const int8_t QTABLE[16] = {
+     0,-1, 1, 0,
+     1, 0, 0,-1,
+    -1, 0, 0, 1,
+     0, 1,-1, 0
+  };
+
+  void begin() {
+    pinMode(PIN_ENC_A,  INPUT_PULLUP);
+    pinMode(PIN_ENC_B,  INPUT_PULLUP);
+    pinMode(PIN_ENC_SW, INPUT_PULLUP);
+    lastAB = (digitalRead(PIN_ENC_A) << 1) | digitalRead(PIN_ENC_B);
+  }
+
+  // Returns -1, 0, +1 detents.
+  int8_t pollRotation() {
+    uint8_t ab = (digitalRead(PIN_ENC_A) << 1) | digitalRead(PIN_ENC_B);
+    if (ab != lastAB) {
+      accum += QTABLE[(lastAB << 2) | ab];
+      lastAB = ab;
+      if (accum >= 4)  { accum = 0; return +1; }
+      if (accum <= -4) { accum = 0; return -1; }
+    }
+    return 0;
+  }
+
+  // Fills outShort/outLong with edge events (one-shot).
+  void pollButton(bool& outShort, bool& outLong) {
+    outShort = outLong = false;
+    bool btn = digitalRead(PIN_ENC_SW);
+    uint32_t now = millis();
+    if (btn != btnLast && (now - lastBtnEdge) > DEBOUNCE_MS) {
+      lastBtnEdge = now;
+      if (!btn) {                        // pressed
+        btnDownAt = now;
+        longFired = false;
+      } else {                           // released
+        if (!longFired && (now - btnDownAt) < LONG_PRESS_MS) outShort = true;
+      }
+      btnLast = btn;
+    }
+    // Fire long-press while still held
+    if (!btnLast && !longFired && (now - btnDownAt) >= LONG_PRESS_MS) {
+      outLong   = true;
+      longFired = true;
+    }
+  }
+}
+
+// =============================================================================
+// DISPLAY MANAGER – SSD1306 128x64 @ 0x3C
+// =============================================================================
+namespace DisplayManager {
+  static Adafruit_SSD1306 oled(128, 64, &Wire, -1);
+  static bool present = false;
+
+  bool begin() {
+    present = oled.begin(SSD1306_SWITCHCAPVCC, 0x3C);
+    if (present) {
+      oled.clearDisplay();
+      oled.setTextColor(SSD1306_WHITE);
+      oled.setTextSize(1);
+      oled.setCursor(0, 0);
+      oled.println(F("PicoPD Pro"));
+      oled.println(F("Booting..."));
+      oled.display();
+    }
+    return present;
+  }
+
+  void render() {
+    if (!present) return;
+    oled.clearDisplay();
+
+    // Header
+    oled.setTextSize(1);
+    oled.setCursor(0, 0);
+    oled.print(F("DEVICE SELECT"));
+    oled.drawFastHLine(0, 9, 128, SSD1306_WHITE);
+
+    // Menu: show 3 entries centered on selectedIdx
+    uint8_t total = ProfileManager::count();
+    int8_t  start = (int8_t)SystemState::selectedIdx - 1;
+    for (int8_t row = 0; row < 3; row++) {
+      int8_t idx = start + row;
+      if (idx < 0)        idx += total;
+      if (idx >= total)   idx -= total;
+      int y = 12 + row * 9;
+      const auto& p = ProfileManager::get(idx);
+      if (idx == SystemState::selectedIdx) {
+        oled.fillRect(0, y - 1, 128, 9, SSD1306_WHITE);
+        oled.setTextColor(SSD1306_BLACK);
+        oled.setCursor(2, y);
+        oled.print('>');
+        oled.print(' ');
+        oled.print(p.name);
+        oled.setTextColor(SSD1306_WHITE);
+      } else {
+        oled.setCursor(2, y);
+        oled.print("  ");
+        oled.print(p.name);
+      }
+    }
+
+    // Live readings
+    oled.drawFastHLine(0, 41, 128, SSD1306_WHITE);
+    char line[24];
+    snprintf(line, sizeof(line), "V:%4.1fV I:%4.2fA",
+             SystemState::liveVAvg, SystemState::liveI);
+    oled.setCursor(0, 44);
+    oled.print(line);
+
+    // Status row
+    const auto& act = ProfileManager::get(SystemState::activeIdx);
+    oled.setCursor(0, 54);
+    oled.print(act.usePPS ? F("PPS ") : F("FIX "));
+    oled.print(SystemState::outputOn ? F("ON  ") : F("OFF "));
+    if (SystemState::errMsg[0]) {
+      oled.print(SystemState::errMsg);
+    } else {
+      oled.print(act.name);
+    }
+
+    oled.display();
+  }
+}
+
+// =============================================================================
+// SERIAL INTERFACE – tiny JSON parser (no external dep)
+// =============================================================================
+namespace SerialInterface {
+  static String rxBuf;
+
+  static bool extractStr(const String& s, const char* key, String& out) {
+    int k = s.indexOf(String("\"") + key + "\"");
+    if (k < 0) return false;
+    int q1 = s.indexOf('"', k + (int)strlen(key) + 2);
+    int q2 = s.indexOf('"', q1 + 1);
+    if (q1 < 0 || q2 < 0) return false;
+    out = s.substring(q1 + 1, q2);
+    return true;
+  }
+  static bool extractNum(const String& s, const char* key, float& out) {
+    int k = s.indexOf(String("\"") + key + "\"");
+    if (k < 0) return false;
+    int c = s.indexOf(':', k);
+    if (c < 0) return false;
+    int i = c + 1;
+    while (i < (int)s.length() && (s[i]==' '||s[i]=='\t')) i++;
+    int j = i;
+    while (j < (int)s.length() &&
+           (isdigit(s[j]) || s[j]=='.' || s[j]=='-' || s[j]=='+')) j++;
+    if (j == i) return false;
+    out = s.substring(i, j).toFloat();
+    return true;
+  }
+
+  static void handleLine(const String& line) {
+    String sval;
+    float  nval;
+
+    // {"select":"<name>"}
+    if (extractStr(line, "select", sval)) {
+      int idx = ProfileManager::findByName(sval.c_str());
+      if (idx >= 0) {
+        SystemState::selectedIdx = (uint8_t)idx;
+        applyProfile((uint8_t)idx);
+      } else {
+        SystemState::setError("UNKNOWN PROFILE");
+      }
+      return;
+    }
+
+    // {"set":"pps"|"fixed", "v":..., "i":...}
+    if (extractStr(line, "set", sval)) {
+      float v = 5.0f, i = 1.0f;
+      extractNum(line, "v", v);
+      extractNum(line, "i", i);
+      bool ok = (sval == "pps") ? PDController::requestPPS(v, i)
+                                : PDController::requestFixed(v, i);
+      if (ok) {
+        SystemState::outputOn = true;
+        SystemState::clearError();
+      } else {
+        PDController::powerGate(false);
+        SystemState::outputOn = false;
+        SystemState::setError("PD FAIL");
+      }
+      return;
+    }
+
+    // {"output":"on"|"off"}
+    if (extractStr(line, "output", sval)) {
+      if (sval == "on") {
+        applyProfile(SystemState::selectedIdx);
+      } else {
+        PDController::powerGate(false);
+        SystemState::outputOn = false;
+      }
+    }
+    (void)nval;
+  }
+
+  void poll() {
+    while (Serial.available()) {
+      char c = (char)Serial.read();
+      if (c == '\n' || c == '\r') {
+        if (rxBuf.length()) { handleLine(rxBuf); rxBuf = ""; }
+      } else if (rxBuf.length() < 256) {
+        rxBuf += c;
+      }
+    }
+  }
+
+  void emitTelemetry() {
+    const auto& p = ProfileManager::get(SystemState::activeIdx);
+    Serial.printf(
+      "{\"v\":%.2f,\"i\":%.2f,\"p\":%.2f,\"mode\":\"%s\","
+      "\"profile\":\"%s\",\"en\":%s,\"err\":\"%s\"}\n",
+      SystemState::liveVAvg, SystemState::liveI,
+      SystemState::liveVAvg * SystemState::liveI,
+      p.usePPS ? "PPS" : "FIXED",
+      p.name,
+      PDController::outputEnabled() ? "true" : "false",
+      SystemState::errMsg);
+  }
+}
+
+// =============================================================================
+// SETUP
+// =============================================================================
 void setup() {
-  Serial.begin(115200);              // USB CDC – this creates the COM port
-  // Do NOT block on `while(!Serial)` forever; allow standalone operation.
+  Serial.begin(115200);
   uint32_t t0 = millis();
-  while (!Serial && (millis() - t0) < 2000) { delay(10); }
+  while (!Serial && (millis() - t0) < 1500) { delay(10); }
 
-  // GPIO3 is the VBUS output gate. Hold it LOW until a contract is
-  // confirmed; requestPPS()/requestFixedPDO() will raise it on success.
+  // VBUS gate – LOW until a contract is confirmed.
   pinMode(PIN_EN, OUTPUT);
   digitalWrite(PIN_EN, LOW);
-  g_outputEnabled = false;
 
+  // I2C – stable 100 kHz so OLED writes never wedge PD comms.
   Wire.setSDA(PIN_SDA);
   Wire.setSCL(PIN_SCL);
   Wire.begin();
-  Wire.setClock(400000);
+  Wire.setClock(100000);
 
-  // Give the AP33772S a moment to come out of reset before the first RDO.
-  delay(50);
+  delay(50);                     // AP33772S reset settling
+  PDController::detect();
 
-  // Default boot: try a safe 5 V PPS contract. Gate opens iff confirmed.
-  if (!requestPPS(g_targetV, g_targetI)) powerGate(false);
+  DisplayManager::begin();
+  InputHandler::begin();
+
+  // Boot in safe 5V mode.
+  if (!applyProfile(0)) {
+    SystemState::setError("PD INIT FAIL");
+  }
+  DisplayManager::render();
 }
 
+// =============================================================================
+// MAIN LOOP – fully non-blocking, millis()-driven
+// =============================================================================
 void loop() {
-  // 1. Drain incoming serial, dispatch on \n
-  while (Serial.available()) {
-    char c = (char)Serial.read();
-    if (c == '\n' || c == '\r') {
-      if (rxBuf.length()) { handleLine(rxBuf); rxBuf = ""; }
-    } else if (rxBuf.length() < 256) {
-      rxBuf += c;
+  uint32_t now = millis();
+
+  // ---- 1. Encoder rotation -> menu navigation -----------------------------
+  int8_t rot = InputHandler::pollRotation();
+  if (rot != 0) {
+    uint8_t total = ProfileManager::count();
+    SystemState::selectedIdx =
+      (uint8_t)((SystemState::selectedIdx + rot + total) % total);
+  }
+
+  // ---- 2. Encoder button --------------------------------------------------
+  bool shortPress = false, longPress = false;
+  InputHandler::pollButton(shortPress, longPress);
+  if (shortPress) {
+    applyProfile(SystemState::selectedIdx);
+  }
+  if (longPress) {
+    if (SystemState::outputOn) {
+      PDController::powerGate(false);
+      SystemState::outputOn = false;
+    } else {
+      applyProfile(SystemState::selectedIdx);
     }
   }
 
-  // 2. Push telemetry @ ~10 Hz, sourced from the AP33772S internal ADC
-  //    (REG_VOLTAGE / REG_CURRENT) so the UI shows actual VBUS, not target.
-  static uint32_t last = 0;
-  static uint8_t  lowVCount = 0;
-  uint32_t now = millis();
-  if (now - last >= 100) {
-    last = now;
-    float v = readVoltage();
-    float i = readCurrent();
-    float p = v * i;
+  // ---- 3. Serial JSON -----------------------------------------------------
+  SerialInterface::poll();
 
-    // Cable-removal / fault watchdog: if the gate is supposed to be open
-    // but VBUS has been near 0 V for >500 ms, drop the gate and require
-    // a fresh negotiation.
-    if (g_outputEnabled && v < 1.0f) {
-      if (++lowVCount >= 5) { powerGate(false); lowVCount = 0; }
+  // ---- 4. Voltage / current sampling + watchdog --------------------------
+  static uint32_t tSample = 0;
+  static uint8_t  lowVCount = 0;
+  if (now - tSample >= 50) {
+    tSample = now;
+    SystemState::liveV = PDController::readVoltage();
+    SystemState::liveI = PDController::readCurrent();
+    // EMA smoothing on the displayed voltage
+    SystemState::liveVAvg += (SystemState::liveV - SystemState::liveVAvg) * 0.25f;
+
+    // Watchdog: gate is open but VBUS < 1V for >500ms -> close gate.
+    if (PDController::outputEnabled() && SystemState::liveV < 1.0f) {
+      if (++lowVCount >= 10) {
+        PDController::powerGate(false);
+        SystemState::outputOn = false;
+        SystemState::setError("VBUS LOST");
+        lowVCount = 0;
+      }
     } else {
       lowVCount = 0;
     }
+  }
 
-    Serial.printf(
-      "{\"v\":%.2f,\"i\":%.2f,\"p\":%.2f,\"mode\":\"%s\",\"profile\":%d,\"en\":%s}\n",
-      v, i, p, g_mode, g_profile, g_outputEnabled ? "true" : "false");
+  // ---- 5. Display refresh @ ~5 Hz ----------------------------------------
+  static uint32_t tDisp = 0;
+  if (now - tDisp >= 200) {
+    tDisp = now;
+    DisplayManager::render();
+  }
+
+  // ---- 6. Telemetry @ ~5 Hz ----------------------------------------------
+  static uint32_t tTel = 0;
+  if (now - tTel >= 200) {
+    tTel = now;
+    SerialInterface::emitTelemetry();
   }
 }
-
