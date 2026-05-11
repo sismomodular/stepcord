@@ -156,14 +156,18 @@ static bool extractNum(const String& s, const char* key, float& out) {
 static void handleLine(const String& line) {
   String cmd, mode;
   if (!extractStr(line, "cmd", cmd)) return;
+  bool ok = true;
   if (cmd == "setMode" && extractStr(line, "mode", mode)) {
-    if (mode == "PD")  { g_mode = "PD";  requestFixedPDO(g_profile); }
-    if (mode == "PPS") { g_mode = "PPS"; requestPPS(g_targetV, g_targetI); }
+    if (mode == "PD")  { g_mode = "PD";  ok = requestFixedPDO(g_profile); }
+    if (mode == "PPS") { g_mode = "PPS"; ok = requestPPS(g_targetV, g_targetI); }
   } else if (cmd == "setVoltage") {
-    float v; if (extractNum(line, "v", v)) { g_targetV = v; requestPPS(g_targetV, g_targetI); }
+    float v; if (extractNum(line, "v", v)) { g_targetV = v; ok = requestPPS(g_targetV, g_targetI); }
   } else if (cmd == "setProfile") {
-    float idx; if (extractNum(line, "idx", idx)) { g_profile = (int)idx; requestFixedPDO(g_profile); }
+    float idx; if (extractNum(line, "idx", idx)) { g_profile = (int)idx; ok = requestFixedPDO(g_profile); }
   }
+  // Negotiation failure -> safety-close the gate so a pedal never sees a
+  // half-configured rail.
+  if (!ok) powerGate(false);
 }
 
 // ---------- Setup / loop ----------
@@ -173,11 +177,11 @@ void setup() {
   uint32_t t0 = millis();
   while (!Serial && (millis() - t0) < 2000) { delay(10); }
 
-  // Enable VBUS output BEFORE talking to the PD controller.
-  // Without this, the AP33772S will ACK I2C writes but produce 0 V.
+  // GPIO3 is the VBUS output gate. Hold it LOW until a contract is
+  // confirmed; requestPPS()/requestFixedPDO() will raise it on success.
   pinMode(PIN_EN, OUTPUT);
-  digitalWrite(PIN_EN, HIGH);
-  delay(5);
+  digitalWrite(PIN_EN, LOW);
+  g_outputEnabled = false;
 
   Wire.setSDA(PIN_SDA);
   Wire.setSCL(PIN_SCL);
@@ -187,8 +191,8 @@ void setup() {
   // Give the AP33772S a moment to come out of reset before the first RDO.
   delay(50);
 
-  // Default boot: request safe 5 V PPS
-  requestPPS(g_targetV, g_targetI);
+  // Default boot: try a safe 5 V PPS contract. Gate opens iff confirmed.
+  if (!requestPPS(g_targetV, g_targetI)) powerGate(false);
 }
 
 void loop() {
@@ -202,15 +206,29 @@ void loop() {
     }
   }
 
-  // 2. Push telemetry @ ~10 Hz
+  // 2. Push telemetry @ ~10 Hz, sourced from the AP33772S internal ADC
+  //    (REG_VOLTAGE / REG_CURRENT) so the UI shows actual VBUS, not target.
   static uint32_t last = 0;
+  static uint8_t  lowVCount = 0;
   uint32_t now = millis();
   if (now - last >= 100) {
     last = now;
     float v = readVoltage();
     float i = readCurrent();
     float p = v * i;
-    Serial.printf("{\"v\":%.2f,\"i\":%.2f,\"p\":%.2f,\"mode\":\"%s\",\"profile\":%d}\n",
-                  v, i, p, g_mode, g_profile);
+
+    // Cable-removal / fault watchdog: if the gate is supposed to be open
+    // but VBUS has been near 0 V for >500 ms, drop the gate and require
+    // a fresh negotiation.
+    if (g_outputEnabled && v < 1.0f) {
+      if (++lowVCount >= 5) { powerGate(false); lowVCount = 0; }
+    } else {
+      lowVCount = 0;
+    }
+
+    Serial.printf(
+      "{\"v\":%.2f,\"i\":%.2f,\"p\":%.2f,\"mode\":\"%s\",\"profile\":%d,\"en\":%s}\n",
+      v, i, p, g_mode, g_profile, g_outputEnabled ? "true" : "false");
   }
 }
+
