@@ -68,25 +68,59 @@ static float readCurrent() {
   return raw * 0.024f; // 24 mA / LSB
 }
 
+// ---------- Power gate (GPIO3) ----------
+// The VBUS output is gated by GPIO3. Even if the AP33772S negotiates a
+// contract, no voltage reaches the barrel jack until GPIO3 is driven HIGH.
+// We keep it LOW until a contract is *confirmed*, and drop it on any error
+// or cable removal so a 9 V pedal never sees an unexpected rail.
+static bool g_outputEnabled = false;
+
+static void powerGate(bool on) {
+  digitalWrite(PIN_EN, on ? HIGH : LOW);
+  g_outputEnabled = on;
+}
+
+// Poll AP33772S STATUS register until the "contract established" bit is set,
+// or we time out. Returns true on success.
+static bool waitForContract(uint32_t timeout_ms) {
+  uint32_t t0 = millis();
+  while (millis() - t0 < timeout_ms) {
+    uint8_t st = 0;
+    if (i2cReadN(REG_STATUS, &st, 1) && (st & 0x01)) return true;
+    delay(5);
+  }
+  return false;
+}
+
 // ---------- Power requests ----------
 // Build a PPS RDO. See USB-PD spec 6.4.2.5; AP33772S issues this on write.
-static void requestPPS(float volts, float amps) {
+// Returns true if the sink confirmed the contract; only then is VBUS gated on.
+static bool requestPPS(float volts, float amps) {
   // Voltage: 20 mV/LSB,  Current: 50 mA/LSB
   uint16_t vRaw = (uint16_t)((volts * 1000.0f) / 20.0f);
   uint16_t iRaw = (uint16_t)((amps  * 1000.0f) / 50.0f);
-  // Object position is set per detected APDO; assume slot 1 here.
   uint32_t rdo = 0;
-  rdo |= ((uint32_t)1 & 0x7) << 28;     // Object position
+  rdo |= ((uint32_t)1 & 0x7) << 28;     // Object position (APDO slot 1)
   rdo |= ((uint32_t)vRaw & 0xFFF) << 9; // Output voltage
   rdo |= ((uint32_t)iRaw & 0x7F);       // Operating current
   uint8_t b[4] = { (uint8_t)rdo, (uint8_t)(rdo>>8), (uint8_t)(rdo>>16), (uint8_t)(rdo>>24) };
-  i2cWriteN(REG_RDO, b, 4);
+
+  powerGate(false);                     // close gate during renegotiation
+  if (!i2cWriteN(REG_RDO, b, 4))     return false;
+  if (!waitForContract(PD_NEGOTIATE_TIMEOUT_MS)) return false;
+  powerGate(true);                      // contract confirmed -> open gate
+  return true;
 }
 
-static void requestFixedPDO(uint8_t idx) {
+static bool requestFixedPDO(uint8_t idx) {
   uint32_t rdo = ((uint32_t)(idx + 1) & 0x7) << 28; // object position 1..7
   uint8_t b[4] = { (uint8_t)rdo, (uint8_t)(rdo>>8), (uint8_t)(rdo>>16), (uint8_t)(rdo>>24) };
-  i2cWriteN(REG_RDO, b, 4);
+
+  powerGate(false);
+  if (!i2cWriteN(REG_RDO, b, 4))     return false;
+  if (!waitForContract(PD_NEGOTIATE_TIMEOUT_MS)) return false;
+  powerGate(true);
+  return true;
 }
 
 // ---------- Command parsing (tiny, no JSON lib) ----------
