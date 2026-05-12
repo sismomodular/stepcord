@@ -17,7 +17,7 @@ export const DEVICES: MusicalDevice[] = [
   { name: "Strymon BigSky",  brand: "Strymon",       voltage: 9.0,  current: 0.3,  defaultPolarity: "center-negative" },
   { name: "Digitakt II",     brand: "Elektron",      voltage: 12.0, current: 1.0,  defaultPolarity: "center-positive" },
   { name: "MicroFreak",      brand: "Arturia",       voltage: 12.0, current: 1.0,  defaultPolarity: "center-positive" },
-  { name: "Volca Series",    brand: "Korg",          voltage: 9.0,  current: 0.5,  defaultPolarity: "center-negative" },
+  { name: "Volca Series",    brand: "Korg",          voltage: 9.0,  current: 1.0,  defaultPolarity: "center-positive" },
   { name: "Manual PPS Mode", brand: "Custom",        voltage: 5.0,  current: 3.0,  defaultPolarity: "center-positive" },
 ];
 
