@@ -1,4 +1,20 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  AlertCircle,
+  CheckCircle2,
+  ChevronDown,
+  ChevronUp,
+  Minus,
+  Plug,
+  PlugZap,
+  Plus,
+  Search,
+  ShieldAlert,
+  SlidersHorizontal,
+  Zap,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { useSerialTelemetry } from "@/hooks/useSerialTelemetry";
 import {
   DEVICES,
@@ -13,8 +29,6 @@ import {
 
 const clampManual = (v: number) =>
   Math.min(MANUAL_MAX_V, Math.max(MANUAL_MIN_V, Math.round(v * 10) / 10));
-
-const pad = (s: string | number, n: number) => String(s).padStart(n, " ");
 
 const Index = () => {
   const { supported, status, error, telemetry, connect, disconnect, send } = useSerialTelemetry();
@@ -35,7 +49,6 @@ const Index = () => {
   const liveV = telemetry?.v ?? (isManualActive ? manualV : activeDevice?.voltage ?? 0);
   const liveI = telemetry?.i ?? 0;
   const live = status === "connected" && telemetry !== null;
-  const outputOn = activeIdx !== null && live;
 
   const requestPPS = useCallback(
     (v: number) => {
@@ -131,6 +144,7 @@ const Index = () => {
 
   useEffect(() => () => cancelHold(), [cancelHold]);
 
+  // Filter excludes Manual entry — manual mode has its own toggle.
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return DEVICES
@@ -139,204 +153,339 @@ const Index = () => {
       .filter(({ d }) => !q || d.name.toLowerCase().includes(q) || (d.brand ?? "").toLowerCase().includes(q));
   }, [query]);
 
-  const headerName = isManualCursor ? "MANUAL PPS" : cursorDevice.name.toUpperCase();
+  const headerName = isManualCursor ? "MANUAL · PPS" : cursorDevice.name.toUpperCase();
   const polarity: Polarity = (isManualCursor ? "center-positive" : cursorDevice.defaultPolarity);
 
-  const statusLabel =
-    live ? "LINK OK" :
-    status === "connecting" ? "LINK..." :
-    status === "unsupported" ? "NO USB" : "NO LINK";
-
   return (
-    <div className="min-h-screen w-full flex items-start justify-center bg-black p-3 sm:p-6">
-      <div className="w-full max-w-[720px]">
-        {/* Hardware bezel */}
-        <div className="oled-bezel">
-          {/* Module label strip */}
-          <div className="flex items-center justify-between px-1 pb-2 text-[10px] uppercase tracking-[0.3em]" style={{ color: "#888", fontFamily: "'VT323', monospace" }}>
-            <span>my[zap]volts · interceptor</span>
-            <span>SSD1306 · 128x64 SIM</span>
-          </div>
-
-          {/* OLED screen */}
-          <div className="oled-screen font-oled">
-            {/* Header bar */}
-            <div className="oled-invert flex items-center justify-between px-2 py-0.5 text-[18px] leading-none">
-              <span>{outputOn ? "OUT  ON " : "OUT  OFF"}</span>
-              <span>{statusLabel}</span>
+    <div className="min-h-screen bg-background">
+      <div className="mx-auto max-w-6xl px-4 py-6 md:px-8 md:py-10 space-y-6">
+        {/* Header */}
+        <header className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div className="flex items-center gap-3">
+            <Logo />
+            <div className="hidden sm:block">
+              <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Interceptor Dashboard</div>
+              <div className="text-sm font-semibold text-foreground">USB-C PD / PPS · AP33772S</div>
             </div>
-
-            {/* Big voltage readout */}
-            <div className="mt-3 text-center">
-              <div className="font-pixel text-[12px] tracking-[0.3em]" style={{ opacity: 0.85 }}>VBUS</div>
-              <div
-                className="font-oled leading-none"
-                style={{ fontSize: "92px", letterSpacing: "0.02em" }}
+          </div>
+          <div className="flex items-center gap-2">
+            <StatusPill live={live} status={status} />
+            {status === "connected" ? (
+              <Button size="sm" variant="outline" onClick={() => void disconnect()} className="hw-btn gap-2 rounded-full">
+                <Plug className="h-3.5 w-3.5" /> Disconnect
+              </Button>
+            ) : (
+              <Button
+                size="sm"
+                onClick={() => void connect()}
+                disabled={!supported || status === "connecting"}
+                className="hw-btn-primary gap-2 rounded-full"
               >
-                {liveV.toFixed(2)}
-                <span style={{ fontSize: "44px" }}> V</span>
-              </div>
-              <div className="font-oled text-[20px]" style={{ marginTop: -4 }}>
-                I = {liveI.toFixed(2)} A    P = {(liveV * liveI).toFixed(2)} W
-              </div>
-            </div>
-
-            {/* Divider */}
-            <div className="my-3" style={{ borderTop: "1px dashed #fff", opacity: 0.6 }} />
-
-            {/* Device + polarity rows */}
-            <div className="grid grid-cols-[80px_1fr] gap-x-2 text-[20px]">
-              <div>DEV :</div>
-              <div className="truncate">
-                <span className="oled-blink">&gt;</span> {headerName}
-              </div>
-
-              <div>BRAND:</div>
-              <div className="truncate">{isManualCursor ? "USER" : (cursorDevice.brand ?? "-").toUpperCase()}</div>
-
-              <div>TGT V:</div>
-              <div>
-                {isManualCursor
-                  ? `${manualV.toFixed(2)} V  [${MANUAL_MIN_V.toFixed(1)}-${MANUAL_MAX_V.toFixed(1)}]`
-                  : `${cursorDevice.voltage.toFixed(2)} V  @  ${cursorDevice.current.toFixed(2)} A`}
-              </div>
-
-              <div>POL  :</div>
-              <div>
-                {polarity === "center-positive" ? "(-)-(+)  CENTER POSITIVE" : "(+)-(-)  CENTER NEGATIVE"}
-              </div>
-
-              <div>MODE :</div>
-              <div>
-                {isManualActive ? "PPS  MANUAL" : activeDevice ? "PPS  PROFILE" : "IDLE"}
-                {activeIdx === cursorIdx && activeDevice ? "   *ACTIVE*" : ""}
-              </div>
-            </div>
-
-            {/* Manual hold progress bar (ASCII style) */}
-            {isManualCursor && needsSafetyHold && (
-              <div className="mt-3 text-[18px]">
-                SAFETY &gt; 12V — HOLD ENTER:
-                <div className="mt-1 font-oled tracking-[0.15em]">
-                  [{"#".repeat(Math.round(holdProgress * 20)).padEnd(20, "·")}]
-                </div>
-              </div>
-            )}
-
-            {error && (
-              <div className="mt-3 oled-invert px-2 py-0.5 text-[18px] leading-none">
-                ! {error}
-              </div>
+                <PlugZap className="h-3.5 w-3.5" />
+                {status === "connecting" ? "Connecting…" : "Connect"}
+              </Button>
             )}
           </div>
+        </header>
 
-          {/* Footer hint strip on bezel */}
-          <div className="flex items-center justify-between px-1 pt-2 text-[10px] uppercase tracking-[0.3em]" style={{ color: "#888", fontFamily: "'VT323', monospace" }}>
-            <span>ENC ROT = SCROLL</span>
-            <span>CLICK = CONFIRM</span>
-            <span>HOLD = BACK</span>
+        {error && (
+          <div className="rounded-xl border border-destructive/40 bg-destructive/5 px-4 py-2.5 text-sm text-destructive">
+            {error}
           </div>
-        </div>
-
-        {/* Hardware control row */}
-        <div className="mt-4 grid grid-cols-3 gap-3">
-          <button onClick={() => cycle(-1)} className="oled-btn">[ &lt; PREV ]</button>
-          <button
-            onMouseDown={handleConfirmDown}
-            onMouseUp={cancelHold}
-            onMouseLeave={cancelHold}
-            onTouchStart={handleConfirmDown}
-            onTouchEnd={cancelHold}
-            className="oled-btn"
-          >
-            [ ENTER ]
-          </button>
-          <button onClick={() => cycle(1)} className="oled-btn">[ NEXT &gt; ]</button>
-        </div>
-
-        {/* Connection + manual toggles */}
-        <div className="mt-3 grid grid-cols-2 gap-3">
-          {status === "connected" ? (
-            <button onClick={() => void disconnect()} className="oled-btn">[ DISCONNECT ]</button>
-          ) : (
-            <button
-              onClick={() => void connect()}
-              disabled={!supported || status === "connecting"}
-              className="oled-btn"
-            >
-              {status === "connecting" ? "[ LINKING... ]" : "[ CONNECT USB ]"}
-            </button>
-          )}
-          <button
-            onClick={() => setCursorIdx(MANUAL_IDX)}
-            className={`oled-btn ${isManualCursor ? "oled-invert" : ""}`}
-          >
-            [ MANUAL PPS ]
-          </button>
-        </div>
-
-        {/* Manual +/- when in manual */}
-        {isManualCursor && (
-          <div className="mt-3 grid grid-cols-3 gap-3">
-            <button onClick={() => setManualV((v) => clampManual(v - MANUAL_STEP_V))} className="oled-btn">[ -0.1 V ]</button>
-            <div className="oled-btn text-center">{manualV.toFixed(2)} V</div>
-            <button onClick={() => setManualV((v) => clampManual(v + MANUAL_STEP_V))} className="oled-btn">[ +0.1 V ]</button>
+        )}
+        {!supported && (
+          <div className="rounded-xl border border-warning/40 bg-warning/10 px-4 py-2.5 text-sm text-foreground">
+            WebSerial isn't available in this browser. Open in Chrome or Edge on desktop to connect.
           </div>
         )}
 
-        {/* SEARCH MENU — strict: only entry to device DB */}
-        {!isManualCursor && (
-          <div className="mt-5 oled-bezel">
-            <div className="oled-screen font-oled">
-              <div className="oled-invert px-2 py-0.5 text-[18px] leading-none">
-                &gt; SEARCH DEVICE
+        {/* Power Meter */}
+        <section className="panel p-6 md:p-8">
+          {/* Top: Device Name */}
+          <div className="flex items-start justify-between gap-4">
+            <div className="min-w-0">
+              <div className="text-[11px] font-medium uppercase tracking-[0.2em] text-muted-foreground">
+                {activeDevice ? "Powering" : "Selected"}
               </div>
-              <div className="mt-2 flex items-center gap-2 text-[20px]">
-                <span>FIND:</span>
-                <input
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value.toUpperCase())}
-                  placeholder="TYPE NAME..."
-                  className="flex-1 bg-transparent outline-none border-0 border-b border-white text-white placeholder:text-white/40 font-oled text-[20px] uppercase"
-                  style={{ borderRadius: 0 }}
-                />
-                <span className="oled-blink">_</span>
+              <h1 className="mt-1 truncate text-3xl font-extrabold tracking-tight text-foreground md:text-5xl">
+                {headerName}
+              </h1>
+              <div className="mt-1 text-sm text-muted-foreground">
+                {isManualCursor
+                  ? `Range ${MANUAL_MIN_V.toFixed(1)} – ${MANUAL_MAX_V.toFixed(1)} V · 100 mV steps`
+                  : `${cursorDevice.brand ?? ""} · target ${cursorDevice.voltage.toFixed(2)} V @ ${cursorDevice.current.toFixed(2)} A`}
               </div>
+            </div>
+            {activeIdx === cursorIdx && activeDevice && (
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-success/10 px-2.5 py-1 text-xs font-semibold text-success">
+                <span className="h-1.5 w-1.5 rounded-full bg-success animate-pulse-dot" />
+                ACTIVE
+              </span>
+            )}
+          </div>
 
-              <div className="mt-3 max-h-[260px] overflow-y-auto text-[20px] leading-tight">
-                {filtered.map(({ d, i }) => {
-                  const isCursor = i === cursorIdx;
-                  const isActive = i === activeIdx;
-                  return (
-                    <button
-                      key={d.name}
-                      onClick={() => applyDevice(i)}
-                      onMouseEnter={() => setCursorIdx(i)}
-                      className={`w-full text-left px-2 py-0.5 flex items-center justify-between ${isCursor ? "oled-invert" : ""}`}
-                    >
-                      <span className="truncate">
-                        {isCursor ? ">" : " "} {d.name.toUpperCase()}
-                      </span>
-                      <span className="ml-2 shrink-0 font-oled">
-                        {pad(d.voltage.toFixed(1), 4)}V {isActive ? "*" : " "}
-                      </span>
-                    </button>
-                  );
-                })}
-                {filtered.length === 0 && (
-                  <div className="px-2 py-3 text-center">-- NO MATCH --</div>
+          {/* Center: Readouts */}
+          <div className="mt-6 grid gap-3 sm:grid-cols-2">
+            <Readout label="VOLTAGE" unit="V" value={liveV.toFixed(2)} />
+            <Readout label="CURRENT" unit="A" value={liveI.toFixed(2)} />
+          </div>
+
+          {/* Manual mode controls or device cycle */}
+          {isManualCursor ? (
+            <div className="mt-6 rounded-xl border border-border bg-muted/40 p-4">
+              <div className="mb-3 flex items-center justify-between">
+                <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-foreground">
+                  <SlidersHorizontal className="h-4 w-4 text-primary" />
+                  Manual PPS · target
+                </div>
+                {manualV > MANUAL_SAFETY_THRESHOLD_V && (
+                  <span className="inline-flex items-center gap-1 text-xs font-semibold text-warning">
+                    <ShieldAlert className="h-3.5 w-3.5" /> Safety lock &gt; 12 V
+                  </span>
                 )}
               </div>
+              <div className="flex items-center justify-between gap-3">
+                <Button onClick={() => cycle(-1)} className="hw-btn h-14 w-14 rounded-2xl text-foreground" aria-label="-100 mV">
+                  <Minus className="h-5 w-5" />
+                </Button>
+                <div className="readout flex-1 px-4 py-3 text-center">
+                  <div className="font-mono-tech text-3xl font-bold md:text-4xl">
+                    {manualV.toFixed(2).padStart(5, "0")}<span className="text-primary/70 text-xl"> V</span>
+                  </div>
+                </div>
+                <Button onClick={() => cycle(1)} className="hw-btn h-14 w-14 rounded-2xl text-foreground" aria-label="+100 mV">
+                  <Plus className="h-5 w-5" />
+                </Button>
+              </div>
             </div>
-          </div>
-        )}
+          ) : (
+            <div className="mt-6 grid grid-cols-3 gap-3">
+              <Button onClick={() => cycle(-1)} className="hw-btn h-14 rounded-2xl gap-2 text-foreground">
+                <ChevronUp className="h-4 w-4" /> Prev
+              </Button>
+              <Button
+                onClick={() => { if (!needsSafetyHold) handleConfirmDown(); }}
+                onMouseDown={() => { if (needsSafetyHold) handleConfirmDown(); }}
+                onMouseUp={cancelHold}
+                onMouseLeave={cancelHold}
+                onTouchStart={() => { if (needsSafetyHold) handleConfirmDown(); }}
+                onTouchEnd={cancelHold}
+                className="hw-btn-primary relative h-14 overflow-hidden rounded-2xl"
+              >
+                <span className="relative flex items-center gap-2 font-semibold">
+                  <CheckCircle2 className="h-4 w-4" /> Confirm
+                </span>
+              </Button>
+              <Button onClick={() => cycle(1)} className="hw-btn h-14 rounded-2xl gap-2 text-foreground">
+                <ChevronDown className="h-4 w-4" /> Next
+              </Button>
+            </div>
+          )}
 
-        {/* Tiny serial number / footer */}
-        <div className="mt-3 text-center text-[10px] uppercase tracking-[0.4em]" style={{ color: "#666", fontFamily: "'VT323', monospace" }}>
-          PicoPD Pro · AP33772S · FW 1.0
-        </div>
+          {isManualCursor && (
+            <div className="mt-3">
+              <Button
+                onClick={() => { if (!needsSafetyHold) handleConfirmDown(); }}
+                onMouseDown={() => { if (needsSafetyHold) handleConfirmDown(); }}
+                onMouseUp={cancelHold}
+                onMouseLeave={cancelHold}
+                onTouchStart={() => { if (needsSafetyHold) handleConfirmDown(); }}
+                onTouchEnd={cancelHold}
+                className={`hw-btn-primary relative h-12 w-full overflow-hidden rounded-2xl ${needsSafetyHold ? "" : ""}`}
+              >
+                {needsSafetyHold && (
+                  <span
+                    className="absolute inset-y-0 left-0 bg-foreground/20"
+                    style={{ width: `${holdProgress * 100}%` }}
+                  />
+                )}
+                <span className="relative flex items-center gap-2 font-semibold">
+                  {needsSafetyHold ? <ShieldAlert className="h-4 w-4" /> : <CheckCircle2 className="h-4 w-4" />}
+                  {needsSafetyHold ? "Hold 2 s to apply" : "Apply manual voltage"}
+                </span>
+              </Button>
+            </div>
+          )}
+
+          {/* Bottom: Polarity */}
+          <div className="mt-6 grid gap-3 sm:grid-cols-2">
+            <PolarityCard active={polarity === "center-positive"} polarity="center-positive" />
+            <PolarityCard active={polarity === "center-negative"} polarity="center-negative" />
+          </div>
+        </section>
+
+        {/* Manual PPS toggle + Device list */}
+        <section className="panel p-5 md:p-6">
+          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="text-sm font-bold uppercase tracking-wider text-foreground">Device Database</h2>
+              <p className="text-xs text-muted-foreground">Select a musical device to send its PPS profile.</p>
+            </div>
+            <button
+              onClick={() => setCursorIdx(MANUAL_IDX)}
+              className={`hw-btn inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold ${
+                isManualCursor ? "!bg-primary !text-primary-foreground !border-primary" : "text-foreground"
+              }`}
+            >
+              <SlidersHorizontal className="h-4 w-4" />
+              Manual PPS
+            </button>
+          </div>
+
+          <div className="relative mb-3">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search devices…"
+              className="hw-btn h-11 rounded-full pl-9"
+              disabled={isManualCursor}
+            />
+          </div>
+
+          {!isManualCursor && (
+            <div className="grid gap-2 sm:grid-cols-2">
+              {filtered.map(({ d, i }) => {
+                const isCursor = i === cursorIdx;
+                const isActive = i === activeIdx;
+                return (
+                  <button
+                    key={d.name}
+                    onClick={() => applyDevice(i)}
+                    onMouseEnter={() => setCursorIdx(i)}
+                    className={`flex items-center justify-between rounded-xl border p-3 text-left transition-[var(--transition-smooth)] ${
+                      isActive
+                        ? "border-success/60 bg-success/5"
+                        : isCursor
+                        ? "border-primary/60 bg-primary/5"
+                        : "border-border bg-card hover:border-primary/40"
+                    }`}
+                  >
+                    <div className="min-w-0">
+                      <div className="truncate text-sm font-bold text-foreground">{d.name}</div>
+                      <div className="truncate text-xs text-muted-foreground">
+                        {d.brand} · <span className="font-mono-tech">{d.voltage.toFixed(1)}V · {d.current.toFixed(2)}A</span>
+                      </div>
+                    </div>
+                    {isActive ? (
+                      <CheckCircle2 className="h-5 w-5 text-success" />
+                    ) : (
+                      <Zap className={`h-4 w-4 ${isCursor ? "text-primary" : "text-muted-foreground"}`} />
+                    )}
+                  </button>
+                );
+              })}
+              {filtered.length === 0 && (
+                <div className="col-span-full rounded-xl border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
+                  No devices match "{query}".
+                </div>
+              )}
+            </div>
+          )}
+
+          {isManualCursor && (
+            <div className="rounded-xl border border-warning/40 bg-warning/10 p-4">
+              <div className="flex items-start gap-3">
+                <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-warning" />
+                <div className="text-sm">
+                  <div className="font-semibold text-foreground">Manual PPS mode</div>
+                  <p className="text-muted-foreground">
+                    Use the <span className="font-mono-tech">−/+</span> controls above to tune the target voltage in 100 mV steps.
+                    Voltages above 12 V require a 2 s hold-to-confirm to protect 9 V pedals.
+                  </p>
+                  <button
+                    onClick={() => setCursorIdx(0)}
+                    className="mt-2 text-xs font-semibold text-primary hover:underline"
+                  >
+                    ← Back to device list
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </section>
       </div>
     </div>
+  );
+};
+
+const Logo = () => (
+  <div className="flex items-center gap-2">
+    <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-foreground text-primary shadow-[var(--shadow-hw)]">
+      <Zap className="h-5 w-5 fill-primary" />
+    </div>
+    <div className="text-xl font-extrabold tracking-tight text-foreground">
+      my<span className="text-primary">⚡</span>volts
+    </div>
+  </div>
+);
+
+const StatusPill = ({ live, status }: { live: boolean; status: string }) => {
+  const label =
+    live ? "LIVE" :
+    status === "connecting" ? "CONNECTING" :
+    status === "unsupported" ? "UNSUPPORTED" : "OFFLINE";
+  const color =
+    live ? "bg-success/10 text-success border-success/30" :
+    status === "connecting" ? "bg-warning/10 text-warning border-warning/30" :
+    "bg-muted text-muted-foreground border-border";
+  return (
+    <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-bold tracking-wider ${color}`}>
+      <span className={`h-1.5 w-1.5 rounded-full ${live ? "bg-success animate-pulse-dot" : status === "connecting" ? "bg-warning" : "bg-muted-foreground"}`} />
+      {label}
+    </span>
+  );
+};
+
+const Readout = ({ label, value, unit }: { label: string; value: string; unit: string }) => (
+  <div className="readout px-5 py-4">
+    <div className="flex items-baseline justify-between text-[10px] font-semibold tracking-[0.2em] text-primary/70">
+      <span>{label}</span>
+      <span>{unit}</span>
+    </div>
+    <div className="mt-1 font-mono-tech text-5xl font-bold text-primary md:text-6xl">
+      {value}
+    </div>
+  </div>
+);
+
+const PolarityCard = ({ active, polarity }: { active: boolean; polarity: Polarity }) => {
+  const isPos = polarity === "center-positive";
+  return (
+    <div
+      className={`flex items-center gap-3 rounded-xl border p-3 transition-[var(--transition-smooth)] ${
+        active ? "border-success/60 bg-success/5" : "border-border bg-muted/30 opacity-60"
+      }`}
+    >
+      <PolarityIcon positive={isPos} active={active} />
+      <div className="min-w-0">
+        <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Polarity</div>
+        <div className="text-sm font-bold text-foreground">
+          {isPos ? "Center Positive" : "Center Negative"}
+        </div>
+      </div>
+      {active && (
+        <span className="ml-auto rounded-full bg-success/10 px-2 py-0.5 text-[10px] font-bold text-success">
+          ACTIVE
+        </span>
+      )}
+    </div>
+  );
+};
+
+const PolarityIcon = ({ positive, active }: { positive: boolean; active: boolean }) => {
+  const stroke = active ? "hsl(var(--success))" : "hsl(var(--muted-foreground))";
+  return (
+    <svg width="44" height="44" viewBox="0 0 44 44" fill="none" aria-hidden>
+      <circle cx="22" cy="22" r="14" stroke={stroke} strokeWidth="2" />
+      <circle cx="22" cy="22" r="5" fill={stroke} />
+      <text x="14" y="10" fontSize="9" fontWeight="700" fill={stroke}>
+        {positive ? "+" : "−"}
+      </text>
+      <text x="28" y="10" fontSize="9" fontWeight="700" fill={stroke}>
+        {positive ? "−" : "+"}
+      </text>
+    </svg>
   );
 };
 

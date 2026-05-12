@@ -2,107 +2,110 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Hardware OLED simulation — pure black + pure white, monospace/bitmap font.
-   No gradients, shadows, blur, or color accents. */
+/* myVolts brand — Laboratory White light theme with Orange + Power Green accents. */
 @layer base {
   :root {
-    --background: 0 0% 0%;
-    --foreground: 0 0% 100%;
-    --card: 0 0% 0%;
-    --card-foreground: 0 0% 100%;
-    --popover: 0 0% 0%;
-    --popover-foreground: 0 0% 100%;
-    --muted: 0 0% 0%;
-    --muted-foreground: 0 0% 100%;
-    --secondary: 0 0% 0%;
-    --secondary-foreground: 0 0% 100%;
-    --border: 0 0% 100%;
-    --input: 0 0% 100%;
-    --primary: 0 0% 100%;
-    --primary-foreground: 0 0% 0%;
-    --accent: 0 0% 100%;
-    --accent-foreground: 0 0% 0%;
-    --success: 0 0% 100%;
-    --success-foreground: 0 0% 0%;
-    --warning: 0 0% 100%;
-    --destructive: 0 0% 100%;
-    --destructive-foreground: 0 0% 0%;
-    --ring: 0 0% 100%;
-    --radius: 0px;
+    /* Surfaces */
+    --background: 0 0% 98%;          /* Laboratory White */
+    --foreground: 215 28% 17%;       /* Deep Slate */
+
+    --card: 0 0% 100%;
+    --card-foreground: 215 28% 17%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 215 28% 17%;
+
+    --muted: 220 14% 94%;            /* Technical Grey light */
+    --muted-foreground: 215 14% 42%; /* Technical Grey */
+
+    --secondary: 220 14% 96%;
+    --secondary-foreground: 215 28% 17%;
+
+    --border: 220 13% 88%;
+    --input: 220 13% 88%;
+
+    /* Brand */
+    --primary: 22 95% 54%;           /* myVolts Orange */
+    --primary-foreground: 0 0% 100%;
+    --primary-glow: 22 100% 64%;
+
+    --accent: 22 95% 54%;            /* mirror primary for orange accents */
+    --accent-foreground: 0 0% 100%;
+
+    --success: 142 70% 40%;          /* Power Green */
+    --success-foreground: 0 0% 100%;
+    --warning: 38 95% 50%;
+    --destructive: 0 78% 52%;
+    --destructive-foreground: 0 0% 100%;
+
+    --ring: 22 95% 54%;
+    --radius: 0.875rem;
+
+    --gradient-primary: linear-gradient(135deg, hsl(22 95% 54%), hsl(14 95% 58%));
+    --gradient-card: linear-gradient(180deg, hsl(0 0% 100%), hsl(220 14% 98%));
+
+    --shadow-hw: 0 1px 0 hsl(0 0% 100%) inset, 0 1px 2px hsl(215 28% 17% / 0.08), 0 4px 12px -4px hsl(215 28% 17% / 0.12);
+    --shadow-card: 0 1px 0 hsl(0 0% 100%) inset, 0 1px 2px hsl(215 28% 17% / 0.06), 0 8px 24px -16px hsl(215 28% 17% / 0.18);
+    --shadow-inset: inset 0 2px 6px hsl(215 28% 17% / 0.10);
+
+    --transition-smooth: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   }
 }
 
 @layer base {
-  * { @apply border-border; }
-  html, body, #root {
-    background: #000;
-    color: #fff;
-    min-height: 100%;
+  * {
+    @apply border-border;
+  }
+  html, body {
+    font-family: 'Inter', 'Helvetica Neue', system-ui, -apple-system, sans-serif;
+    font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
   }
   body {
-    font-family: 'VT323', 'OCR A Std', 'Courier New', ui-monospace, monospace;
-    font-size: 20px;
-    line-height: 1.15;
-    letter-spacing: 0.02em;
-    -webkit-font-smoothing: none;
-    -moz-osx-font-smoothing: grayscale;
-    text-rendering: geometricPrecision;
-    image-rendering: pixelated;
+    @apply bg-background text-foreground antialiased;
   }
 }
 
 @layer utilities {
-  .font-pixel { font-family: 'Press Start 2P', 'VT323', monospace; letter-spacing: 0; }
-  .font-oled  { font-family: 'VT323', 'OCR A Std', 'Courier New', monospace; }
-
-  /* The OLED screen surface: pure black with a faint scanline/pixel grid. */
-  .oled-screen {
-    background-color: #000;
-    background-image:
-      repeating-linear-gradient(
-        to bottom,
-        rgba(255,255,255,0.04) 0px,
-        rgba(255,255,255,0.04) 1px,
-        transparent 1px,
-        transparent 3px
-      );
-    color: #fff;
-    border: 1px solid #fff;
-    padding: 18px 20px;
+  .font-mono-tech {
+    font-family: 'JetBrains Mono', 'SF Mono', ui-monospace, Menlo, monospace;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.02em;
   }
 
-  /* Hardware bezel around the screen — flat dark grey, hard edges. */
-  .oled-bezel {
-    background: #1a1a1a;
-    border: 2px solid #2a2a2a;
-    padding: 16px;
+  /* Tactile hardware button look */
+  .hw-btn {
+    background: linear-gradient(180deg, hsl(0 0% 100%), hsl(220 14% 96%));
+    box-shadow: var(--shadow-hw);
+    border: 1px solid hsl(var(--border));
+    transition: var(--transition-smooth);
+  }
+  .hw-btn:hover { background: linear-gradient(180deg, hsl(0 0% 100%), hsl(220 14% 94%)); }
+  .hw-btn:active { box-shadow: var(--shadow-inset); transform: translateY(1px); }
+
+  .hw-btn-primary {
+    background: linear-gradient(180deg, hsl(22 100% 60%), hsl(22 95% 50%));
+    color: hsl(var(--primary-foreground));
+    border: 1px solid hsl(22 95% 44%);
+    box-shadow: 0 1px 0 hsl(0 0% 100% / 0.3) inset, 0 1px 2px hsl(22 95% 30% / 0.25), 0 6px 14px -6px hsl(22 95% 50% / 0.55);
   }
 
-  /* Inverted selection bar — white block with black text, like real OLEDs. */
-  .oled-invert {
-    background: #fff;
-    color: #000;
+  .readout {
+    background: hsl(215 28% 12%);
+    color: hsl(22 100% 64%);
+    border-radius: calc(var(--radius) - 2px);
+    box-shadow: var(--shadow-inset), 0 0 0 1px hsl(215 28% 8%);
   }
 
-  /* Hard-edged hardware button: white outline on black. */
-  .oled-btn {
-    background: #000;
-    color: #fff;
-    border: 1px solid #fff;
-    padding: 6px 12px;
-    font-family: 'VT323', monospace;
-    font-size: 18px;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
+  .panel {
+    background: var(--gradient-card);
+    border: 1px solid hsl(var(--border));
+    box-shadow: var(--shadow-card);
+    border-radius: var(--radius);
   }
-  .oled-btn:hover { background: #fff; color: #000; }
-  .oled-btn:active { background: #fff; color: #000; }
-  .oled-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 }
 
-/* Cursor blink — bitmap caret, no fade. */
-@keyframes oled-blink {
-  0%, 49%   { opacity: 1; }
-  50%, 100% { opacity: 0; }
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
 }
-.oled-blink { animation: oled-blink 1s steps(1, end) infinite; }
+.animate-pulse-dot { animation: pulse-dot 1.6s ease-in-out infinite; }
