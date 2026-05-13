@@ -334,33 +334,23 @@ const Index = () => {
           </div>
 
           <div className="mb-3 flex flex-col gap-2 sm:flex-row">
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                const q = query.trim();
-                const url = q
-                  ? `https://myvolts.com/powermygear/?q=${encodeURIComponent(q)}`
-                  : "https://myvolts.com/powermygear/";
-                window.open(url, "_blank", "noopener,noreferrer");
-              }}
-              className="relative flex-1"
-              role="search"
-            >
+            <div className="relative flex-1">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search devices… (press Enter to search myVolts catalog)"
+                placeholder="Search devices in database…"
                 className="hw-btn h-11 rounded-full pl-9"
                 disabled={isManualCursor}
                 aria-label="Search devices"
               />
-            </form>
+            </div>
             <a
               href={`https://myvolts.com/powermygear/${query.trim() ? `?q=${encodeURIComponent(query.trim())}` : ""}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="hw-btn inline-flex items-center justify-center gap-2 rounded-full px-4 py-2 text-sm font-semibold text-foreground"
+              className="hw-btn inline-flex items-center justify-center gap-2 rounded-full px-4 py-2 text-sm font-semibold text-foreground whitespace-nowrap"
+              title="Open the full myVolts catalog in a new tab"
             >
               <ExternalLink className="h-4 w-4" />
               Search on myVolts
