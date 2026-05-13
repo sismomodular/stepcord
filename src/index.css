@@ -2,55 +2,53 @@
 @tailwind components;
 @tailwind utilities;
 
-/* OLED HARDWARE AESTHETIC — pure black / pure white pixel-bitmap UI.
-   Emulates a real SSD1306 / synth module display photographed up close. */
+/* myVolts brand — Laboratory White light theme with Orange + Power Green accents. */
 @layer base {
   :root {
-    /* Pure OLED surfaces */
-    --background: 0 0% 0%;            /* #000000 */
-    --foreground: 0 0% 100%;          /* #FFFFFF */
+    /* Surfaces */
+    --background: 0 0% 98%;          /* Laboratory White */
+    --foreground: 215 28% 17%;       /* Deep Slate */
 
-    --card: 0 0% 0%;
-    --card-foreground: 0 0% 100%;
+    --card: 0 0% 100%;
+    --card-foreground: 215 28% 17%;
 
-    --popover: 0 0% 0%;
-    --popover-foreground: 0 0% 100%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 215 28% 17%;
 
-    /* Dim white = unlit pixels mid-gray */
-    --muted: 0 0% 8%;
-    --muted-foreground: 0 0% 55%;
+    --muted: 220 14% 94%;            /* Technical Grey light */
+    --muted-foreground: 215 14% 42%; /* Technical Grey */
 
-    --secondary: 0 0% 6%;
-    --secondary-foreground: 0 0% 100%;
+    --secondary: 220 14% 96%;
+    --secondary-foreground: 215 28% 17%;
 
-    --border: 0 0% 100%;              /* white hairlines */
-    --input: 0 0% 100%;
+    --border: 220 13% 88%;
+    --input: 220 13% 88%;
 
-    /* On a real OLED there are no colors. Force everything to white. */
-    --primary: 0 0% 100%;
-    --primary-foreground: 0 0% 0%;
-    --primary-glow: 0 0% 100%;
+    /* Brand */
+    --primary: 22 95% 54%;           /* myVolts Orange */
+    --primary-foreground: 0 0% 100%;
+    --primary-glow: 22 100% 64%;
 
-    --accent: 0 0% 100%;
-    --accent-foreground: 0 0% 0%;
+    --accent: 22 95% 54%;            /* mirror primary for orange accents */
+    --accent-foreground: 0 0% 100%;
 
-    --success: 0 0% 100%;
-    --success-foreground: 0 0% 0%;
-    --warning: 0 0% 100%;
-    --destructive: 0 0% 100%;
-    --destructive-foreground: 0 0% 0%;
+    --success: 142 70% 40%;          /* Power Green */
+    --success-foreground: 0 0% 100%;
+    --warning: 38 95% 50%;
+    --destructive: 0 78% 52%;
+    --destructive-foreground: 0 0% 100%;
 
-    --ring: 0 0% 100%;
-    --radius: 0rem;                   /* hardware = sharp corners */
+    --ring: 22 95% 54%;
+    --radius: 0.875rem;
 
-    --gradient-primary: none;
-    --gradient-card: none;
+    --gradient-primary: linear-gradient(135deg, hsl(22 95% 54%), hsl(14 95% 58%));
+    --gradient-card: linear-gradient(180deg, hsl(0 0% 100%), hsl(220 14% 98%));
 
-    --shadow-hw: none;
-    --shadow-card: none;
-    --shadow-inset: none;
+    --shadow-hw: 0 1px 0 hsl(0 0% 100%) inset, 0 1px 2px hsl(215 28% 17% / 0.08), 0 4px 12px -4px hsl(215 28% 17% / 0.12);
+    --shadow-card: 0 1px 0 hsl(0 0% 100%) inset, 0 1px 2px hsl(215 28% 17% / 0.06), 0 8px 24px -16px hsl(215 28% 17% / 0.18);
+    --shadow-inset: inset 0 2px 6px hsl(215 28% 17% / 0.10);
 
-    --transition-smooth: none;
+    --transition-smooth: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   }
 }
 
@@ -58,110 +56,56 @@
   * {
     @apply border-border;
   }
-  html, body, #root {
-    background: #000000;
-  }
   html, body {
-    font-family: 'VT323', 'Share Tech Mono', 'OCR A Std', 'Courier New', monospace;
-    -webkit-font-smoothing: none;
-    -moz-osx-font-smoothing: grayscale;
-    font-smooth: never;
-    letter-spacing: 0.04em;
-    text-rendering: geometricPrecision;
+    font-family: 'Inter', 'Helvetica Neue', system-ui, -apple-system, sans-serif;
+    font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
   }
   body {
-    @apply bg-background text-foreground;
-    color: #FFFFFF;
-    text-shadow: 0 0 1px rgba(255,255,255,0.35);
+    @apply bg-background text-foreground antialiased;
   }
-
-  /* Scanline overlay — subtle, like a macro photo of a real OLED */
-  body::before {
-    content: "";
-    position: fixed;
-    inset: 0;
-    pointer-events: none;
-    background-image: repeating-linear-gradient(
-      to bottom,
-      rgba(255,255,255,0.04) 0px,
-      rgba(255,255,255,0.04) 1px,
-      transparent 1px,
-      transparent 3px
-    );
-    z-index: 9999;
-    mix-blend-mode: screen;
-  }
-
-  /* Headings always uppercase, monospace */
-  h1, h2, h3, h4 {
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-  }
-
-  ::selection { background: #FFFFFF; color: #000000; }
 }
 
 @layer utilities {
-  /* Pixel font helpers */
-  .font-pixel { font-family: 'Press Start 2P', 'VT323', monospace; letter-spacing: 0.06em; }
-  .font-mono-tech { font-family: 'VT323', 'Share Tech Mono', monospace; font-variant-numeric: tabular-nums; letter-spacing: 0.02em; }
-
-  /* Hardware button = white outline box, no fill, no shadow */
-  .hw-btn {
-    background: #000000 !important;
-    color: #FFFFFF !important;
-    border: 1px solid #FFFFFF !important;
-    border-radius: 0 !important;
-    box-shadow: none !important;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    font-family: 'VT323', monospace;
-    transition: none;
+  .font-mono-tech {
+    font-family: 'JetBrains Mono', 'SF Mono', ui-monospace, Menlo, monospace;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.02em;
   }
-  .hw-btn:hover { background: #FFFFFF !important; color: #000000 !important; }
-  .hw-btn:active { background: #FFFFFF !important; color: #000000 !important; }
+
+  /* Tactile hardware button look */
+  .hw-btn {
+    background: linear-gradient(180deg, hsl(0 0% 100%), hsl(220 14% 96%));
+    box-shadow: var(--shadow-hw);
+    border: 1px solid hsl(var(--border));
+    transition: var(--transition-smooth);
+  }
+  .hw-btn:hover { background: linear-gradient(180deg, hsl(0 0% 100%), hsl(220 14% 94%)); }
+  .hw-btn:active { box-shadow: var(--shadow-inset); transform: translateY(1px); }
 
   .hw-btn-primary {
-    background: #FFFFFF !important;
-    color: #000000 !important;
-    border: 1px solid #FFFFFF !important;
-    border-radius: 0 !important;
-    box-shadow: none !important;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    font-family: 'VT323', monospace;
+    background: linear-gradient(180deg, hsl(22 100% 60%), hsl(22 95% 50%));
+    color: hsl(var(--primary-foreground));
+    border: 1px solid hsl(22 95% 44%);
+    box-shadow: 0 1px 0 hsl(0 0% 100% / 0.3) inset, 0 1px 2px hsl(22 95% 30% / 0.25), 0 6px 14px -6px hsl(22 95% 50% / 0.55);
   }
-  .hw-btn-primary:hover { background: #000000 !important; color: #FFFFFF !important; }
 
-  /* Readout: invert — large white digits on black, framed */
   .readout {
-    background: #000000;
-    color: #FFFFFF;
-    border: 1px solid #FFFFFF;
-    border-radius: 0;
-    box-shadow: none;
+    background: hsl(215 28% 12%);
+    color: hsl(22 100% 64%);
+    border-radius: calc(var(--radius) - 2px);
+    box-shadow: var(--shadow-inset), 0 0 0 1px hsl(215 28% 8%);
   }
 
-  /* Panel = sharp-edged white-bordered box, no gradient */
   .panel {
-    background: #000000;
-    border: 1px solid #FFFFFF;
-    border-radius: 0;
-    box-shadow: none;
+    background: var(--gradient-card);
+    border: 1px solid hsl(var(--border));
+    box-shadow: var(--shadow-card);
+    border-radius: var(--radius);
   }
-
-  /* Force any rounded utility back to sharp on root scope */
-  .oled-sharp, .oled-sharp * { border-radius: 0 !important; }
 }
 
 @keyframes pulse-dot {
   0%, 100% { opacity: 1; }
-  50% { opacity: 0.2; }
+  50% { opacity: 0.4; }
 }
-.animate-pulse-dot { animation: pulse-dot 1s steps(2, end) infinite; }
-
-@keyframes oled-blink {
-  0%, 49% { opacity: 1; }
-  50%, 100% { opacity: 0; }
-}
-.oled-blink { animation: oled-blink 1s steps(1, end) infinite; }
+.animate-pulse-dot { animation: pulse-dot 1.6s ease-in-out infinite; }
