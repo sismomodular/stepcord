@@ -409,15 +409,18 @@ const Index = () => {
   );
 };
 
+import myVoltsLogo from "@/assets/myvolts-logo.png";
+
 const Logo = () => (
-  <div className="flex items-center gap-2">
-    <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-foreground text-primary shadow-[var(--shadow-hw)]">
-      <Zap className="h-5 w-5 fill-primary" />
-    </div>
-    <div className="text-xl font-extrabold tracking-tight text-foreground">
-      my<span className="text-primary">⚡</span>volts
-    </div>
-  </div>
+  <a href="https://myvolts.com" target="_blank" rel="noreferrer" className="flex items-center">
+    <img
+      src={myVoltsLogo}
+      alt="myVolts"
+      className="h-9 w-auto object-contain"
+      loading="eager"
+      decoding="async"
+    />
+  </a>
 );
 
 const StatusPill = ({ live, status }: { live: boolean; status: string }) => {
