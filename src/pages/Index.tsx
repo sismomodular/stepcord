@@ -157,7 +157,7 @@ const Index = () => {
   const polarity: Polarity = (isManualCursor ? "center-positive" : cursorDevice.defaultPolarity);
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="oled-sharp min-h-screen bg-background">
       <div className="mx-auto max-w-6xl px-4 py-6 md:px-8 md:py-10 space-y-6">
         {/* Header */}
         <header className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
