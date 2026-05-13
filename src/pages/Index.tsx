@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertCircle,
+  ExternalLink,
   CheckCircle2,
   ChevronDown,
   ChevronUp,
