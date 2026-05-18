@@ -73,19 +73,11 @@ const Index = () => {
 
   const applyDevice = useCallback(
     (idx: number) => {
-      const d = DEVICES[idx];
       setCursorIdx(idx);
       setActiveIdx(idx);
-      if (idx === MANUAL_IDX) {
-        requestPPS(manualV);
-        void send({ cmd: "setProfile", idx });
-      } else {
-        void send({ cmd: "setMode", mode: "PPS" });
-        void send({ cmd: "setVoltage", v: d.voltage });
-        void send({ cmd: "setProfile", idx });
-      }
+      void send({ teste: Number(idx) });
     },
-    [manualV, requestPPS, send],
+    [send],
   );
 
   const needsSafetyHold = isManualCursor && manualV > MANUAL_SAFETY_THRESHOLD_V;
@@ -110,8 +102,7 @@ const Index = () => {
           setHoldProgress(0);
           setActiveIdx(MANUAL_IDX);
           setCursorIdx(MANUAL_IDX);
-          requestPPS(manualV);
-          void send({ cmd: "setProfile", idx: MANUAL_IDX });
+          void send({ teste: Number(MANUAL_IDX) });
           return;
         }
         holdRafRef.current = requestAnimationFrame(tick);
