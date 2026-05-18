@@ -38,7 +38,11 @@ const Dashboard = () => {
 
   const pickProfile = useCallback((idx: number) => {
     setSelectedIdx(idx);
-    void send({ teste: Number(idx) });
+    if (idx === MANUAL_IDX) {
+      void send({ setProfile: Number(MANUAL_IDX), manualVolt: Number(manualV.toFixed(1)) });
+    } else {
+      void send({ setProfile: Number(idx) });
+    }
   }, [send, manualV]);
 
   const onManualVoltChange = useCallback((v: number) => {

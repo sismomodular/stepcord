@@ -51,10 +51,9 @@ const Index = () => {
   const liveI = telemetry?.i ?? 0;
   const live = status === "connected" && telemetry !== null;
 
-  const requestPPS = useCallback(
+  const requestManual = useCallback(
     (v: number) => {
-      void send({ cmd: "setMode", mode: "PPS" });
-      void send({ cmd: "setVoltage", v: +v.toFixed(2) });
+      void send({ setProfile: Number(MANUAL_IDX), manualVolt: Number(v.toFixed(1)) });
     },
     [send],
   );
@@ -63,7 +62,7 @@ const Index = () => {
     if (isManualCursor && (isManualActive || activeIdx === null)) {
       setManualV((prev) => {
         const next = clampManual(prev + delta * MANUAL_STEP_V);
-        if (isManualActive && next <= MANUAL_SAFETY_THRESHOLD_V) requestPPS(next);
+        if (isManualActive && next <= MANUAL_SAFETY_THRESHOLD_V) requestManual(next);
         return next;
       });
       return;
@@ -75,9 +74,13 @@ const Index = () => {
     (idx: number) => {
       setCursorIdx(idx);
       setActiveIdx(idx);
-      void send({ teste: Number(idx) });
+      if (idx === MANUAL_IDX) {
+        void send({ setProfile: Number(MANUAL_IDX), manualVolt: Number(manualV.toFixed(1)) });
+      } else {
+        void send({ setProfile: Number(idx) });
+      }
     },
-    [send],
+    [send, manualV],
   );
 
   const needsSafetyHold = isManualCursor && manualV > MANUAL_SAFETY_THRESHOLD_V;
@@ -102,7 +105,7 @@ const Index = () => {
           setHoldProgress(0);
           setActiveIdx(MANUAL_IDX);
           setCursorIdx(MANUAL_IDX);
-          void send({ teste: Number(MANUAL_IDX) });
+          void send({ setProfile: Number(MANUAL_IDX), manualVolt: Number(manualV.toFixed(1)) });
           return;
         }
         holdRafRef.current = requestAnimationFrame(tick);
@@ -111,7 +114,7 @@ const Index = () => {
       return;
     }
     applyDevice(cursorIdx);
-  }, [applyDevice, cursorIdx, manualV, needsSafetyHold, requestPPS, send]);
+  }, [applyDevice, cursorIdx, manualV, needsSafetyHold, send]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
