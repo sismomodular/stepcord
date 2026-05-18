@@ -43,7 +43,6 @@ const serialSnapshot: SerialSnapshot = {
 const listeners = new Set<() => void>();
 
 let port: any = null;
-let writer: WritableStreamDefaultWriter<Uint8Array> | null = null;
 let reader: ReadableStreamDefaultReader<string> | null = null;
 let readableStreamClosed: Promise<void> | null = null;
 let keepReading = false;
@@ -152,14 +151,10 @@ const cleanupSerial = async (nextStatus: Status = "disconnected", nextError: str
     readableStreamClosed = null;
   }
 
-  if (writer) {
-    try {
-      writer.releaseLock();
-    } catch {}
-    writer = null;
-  }
-
   if (port) {
+    try {
+      port.status = "closed";
+    } catch {}
     try {
       port.removeEventListener?.("disconnect", handlePortDisconnect);
     } catch {}
@@ -219,7 +214,7 @@ async function conectarSerial() {
     return;
   }
 
-  if (port || writer) {
+  if (port) {
     await cleanupSerial();
   }
 
@@ -230,13 +225,13 @@ async function conectarSerial() {
     port.addEventListener?.("disconnect", handlePortDisconnect);
 
     await port.open({ baudRate: 115200 });
+    port.status = "open";
     console.log("Porta Serial aberta com sucesso!");
 
     if (!port.writable) {
       throw new Error("Canal de escrita indisponível na porta serial.");
     }
 
-    writer = port.writable.getWriter();
     keepReading = true;
     setSerialState({ status: "connected", error: null });
 
@@ -252,22 +247,24 @@ async function conectarSerial() {
 }
 
 async function sendHardwareCommand(payload: SerialCommand) {
-  if (!port || !writer) {
-    console.error("Erro: Porta não conectada ou canal de escrita indisponível.");
-    setSerialState({ error: "Porta não conectada ou canal de escrita indisponível." });
+  if (!port || port.status !== "open") {
+    console.error("A porta Serial não está aberta. Conecte primeiro!");
+    setSerialState({ error: "A porta Serial não está aberta. Conecte primeiro!" });
     return;
   }
 
   try {
     const encoder = new TextEncoder();
     const jsonString = JSON.stringify(payload) + "\n";
+    const localWriter = port.writable.getWriter();
 
-    await writer.write(encoder.encode(jsonString));
-    console.log("Dado enviado com sucesso para o OLED:", jsonString);
+    await localWriter.write(encoder.encode(jsonString));
+    console.log("Comando enviado com sucesso:", jsonString);
+    localWriter.releaseLock();
     setSerialState({ error: null });
   } catch (err: any) {
-    console.error("Erro crítico ao enviar dados:", err);
-    setSerialState({ error: err?.message ?? "Erro crítico ao enviar dados." });
+    console.error("Erro crítico ao enviar dados pela Serial:", err);
+    setSerialState({ error: err?.message ?? "Erro crítico ao enviar dados pela Serial." });
   }
 }
 
