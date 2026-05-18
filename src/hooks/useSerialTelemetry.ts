@@ -154,9 +154,13 @@ export function useSerialTelemetry() {
   const send = useCallback(async (cmd: SerialCommand) => {
     const w = writerRef.current;
     if (!w) return;
-    const data = new TextEncoder().encode(JSON.stringify(cmd) + "\n");
+
+    const encoder = new TextEncoder();
+    const jsonString = JSON.stringify(cmd) + "\n";
+
     try {
-      await w.write(data);
+      console.log("Enviado para o hardware:", jsonString);
+      await w.write(encoder.encode(jsonString));
     } catch (e: any) {
       setError(e?.message ?? "Write error");
     }
