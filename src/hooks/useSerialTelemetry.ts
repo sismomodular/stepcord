@@ -253,18 +253,23 @@ async function sendHardwareCommand(payload: SerialCommand) {
     return;
   }
 
+  let localWriter: WritableStreamDefaultWriter<Uint8Array> | null = null;
+
   try {
     const encoder = new TextEncoder();
     const jsonString = JSON.stringify(payload) + "\n";
-    const localWriter = port.writable.getWriter();
+    localWriter = port.writable.getWriter();
 
     await localWriter.write(encoder.encode(jsonString));
     console.log("Comando enviado com sucesso:", jsonString);
-    localWriter.releaseLock();
     setSerialState({ error: null });
   } catch (err: any) {
     console.error("Erro crítico ao enviar dados pela Serial:", err);
     setSerialState({ error: err?.message ?? "Erro crítico ao enviar dados pela Serial." });
+  } finally {
+    try {
+      localWriter?.releaseLock();
+    } catch {}
   }
 }
 
