@@ -121,14 +121,12 @@ export function useSerialTelemetry() {
               if (!line) continue;
               try {
                 const obj = JSON.parse(line) as Telemetry;
-                // Accept both compact {v,i} and verbose {voltage,current} formats.
                 if (typeof obj.v !== "number" && typeof obj.voltage === "number") obj.v = obj.voltage;
                 if (typeof obj.i !== "number" && typeof obj.current === "number") obj.i = obj.current;
                 if (typeof obj.v === "number" && typeof obj.i === "number") {
                   if (typeof obj.p !== "number") obj.p = +(obj.v * obj.i).toFixed(2);
                   setTelemetry(obj);
-                } else if (obj.device || obj.state || obj.polarity) {
-                  // Status frame without numeric readings — still surface it.
+                } else if (obj.device || obj.state || obj.polarity || obj.output != null || obj.remote != null) {
                   setTelemetry({ v: 0, i: 0, p: 0, ...obj });
                 }
               } catch {
@@ -139,6 +137,11 @@ export function useSerialTelemetry() {
             setError(e?.message ?? "Read error");
             break;
           }
+        }
+        // Reader loop ended (cable unplugged or cancelled) — clean up state.
+        if (keepReadingRef.current) {
+          keepReadingRef.current = false;
+          void disconnect();
         }
       })();
     } catch (e: any) {
