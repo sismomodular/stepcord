@@ -42,6 +42,7 @@ export type Telemetry = {
   current?: number;
   polarity?: string;
   state?: string;
+  remote?: boolean;
   output?: 0 | 1 | boolean;
 };
 
