@@ -39,9 +39,9 @@ const Dashboard = () => {
   const pickProfile = useCallback((idx: number) => {
     setSelectedIdx(idx);
     if (idx === MANUAL_IDX) {
-      void send({ setProfile: idx, manualVolt: +manualV.toFixed(1) });
+      void send({ setProfile: Number(idx), manualVolt: Number(manualV.toFixed(1)) });
     } else {
-      void send({ setProfile: idx });
+      void send({ setProfile: Number(idx) });
     }
   }, [send, manualV]);
 
@@ -49,13 +49,13 @@ const Dashboard = () => {
     const clamped = Math.min(MANUAL_MAX_V, Math.max(MANUAL_MIN_V, Math.round(v * 10) / 10));
     setManualV(clamped);
     if (isManual && connected) {
-      void send({ setProfile: MANUAL_IDX, manualVolt: clamped });
+      void send({ setProfile: Number(MANUAL_IDX), manualVolt: Number(clamped.toFixed(1)) });
     }
   }, [isManual, connected, send]);
 
   const toggleOutput = useCallback((on: boolean) => {
     setOutput(on);
-    void send({ setOutput: on ? 1 : 0 });
+    void send({ setOutput: Number(on ? 1 : 0) });
   }, [send]);
 
   const deviceName = telemetry?.device ?? (selectedIdx != null ? DEVICES[selectedIdx].name : "—");
