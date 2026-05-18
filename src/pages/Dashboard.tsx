@@ -61,9 +61,7 @@ const Dashboard = () => {
   const deviceName = telemetry?.device ?? (selectedIdx != null ? DEVICES[selectedIdx].name : "—");
   const voltage = telemetry?.v ?? (isManual ? manualV : selectedIdx != null ? DEVICES[selectedIdx].voltage : 0);
   const current = telemetry?.i ?? (selectedIdx != null ? DEVICES[selectedIdx].current : 0);
-  const polarity = telemetry?.polarity ?? (selectedIdx != null
-    ? (DEVICES[selectedIdx].defaultPolarity === "center-negative" ? "USE INVERTER C-" : "STANDARD C+")
-    : "—");
+  const polarity = telemetry?.polarity ?? (selectedIdx != null ? DEVICES[selectedIdx].polarityLabel : "—");
   const state = telemetry?.state ?? (connected ? "IDLE" : "DISCONNECTED");
   const remote = telemetry?.remote ?? false;
 
