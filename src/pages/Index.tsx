@@ -105,7 +105,7 @@ const Index = () => {
           setHoldProgress(0);
           setActiveIdx(MANUAL_IDX);
           setCursorIdx(MANUAL_IDX);
-          void send({ teste: Number(MANUAL_IDX) });
+          void send({ setProfile: Number(MANUAL_IDX), manualVolt: Number(manualV.toFixed(1)) });
           return;
         }
         holdRafRef.current = requestAnimationFrame(tick);
@@ -114,7 +114,7 @@ const Index = () => {
       return;
     }
     applyDevice(cursorIdx);
-  }, [applyDevice, cursorIdx, manualV, needsSafetyHold, requestPPS, send]);
+  }, [applyDevice, cursorIdx, manualV, needsSafetyHold, send]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
