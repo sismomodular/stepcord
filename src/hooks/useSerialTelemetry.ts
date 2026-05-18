@@ -37,12 +37,19 @@ export type Telemetry = {
   p?: number;
   mode?: "PD" | "PPS";
   profile?: number;
+  device?: string;
+  voltage?: number;
+  current?: number;
+  polarity?: string;
+  state?: string;
+  output?: 0 | 1 | boolean;
 };
 
 export type SerialCommand =
   | { cmd: "setMode"; mode: "PD" | "PPS" }
   | { cmd: "setVoltage"; v: number }
-  | { cmd: "setProfile"; idx: number };
+  | { cmd: "setProfile"; idx: number }
+  | Record<string, unknown>;
 
 type Status = "unsupported" | "disconnected" | "connecting" | "connected" | "error";
 
@@ -113,9 +120,15 @@ export function useSerialTelemetry() {
               if (!line) continue;
               try {
                 const obj = JSON.parse(line) as Telemetry;
+                // Accept both compact {v,i} and verbose {voltage,current} formats.
+                if (typeof obj.v !== "number" && typeof obj.voltage === "number") obj.v = obj.voltage;
+                if (typeof obj.i !== "number" && typeof obj.current === "number") obj.i = obj.current;
                 if (typeof obj.v === "number" && typeof obj.i === "number") {
                   if (typeof obj.p !== "number") obj.p = +(obj.v * obj.i).toFixed(2);
                   setTelemetry(obj);
+                } else if (obj.device || obj.state || obj.polarity) {
+                  // Status frame without numeric readings — still surface it.
+                  setTelemetry({ v: 0, i: 0, p: 0, ...obj });
                 }
               } catch {
                 // ignore non-JSON / partial frames
