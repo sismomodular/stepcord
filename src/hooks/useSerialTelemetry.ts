@@ -37,12 +37,19 @@ export type Telemetry = {
   p?: number;
   mode?: "PD" | "PPS";
   profile?: number;
+  device?: string;
+  voltage?: number;
+  current?: number;
+  polarity?: string;
+  state?: string;
+  output?: 0 | 1 | boolean;
 };
 
 export type SerialCommand =
   | { cmd: "setMode"; mode: "PD" | "PPS" }
   | { cmd: "setVoltage"; v: number }
-  | { cmd: "setProfile"; idx: number };
+  | { cmd: "setProfile"; idx: number }
+  | Record<string, unknown>;
 
 type Status = "unsupported" | "disconnected" | "connecting" | "connected" | "error";
 
