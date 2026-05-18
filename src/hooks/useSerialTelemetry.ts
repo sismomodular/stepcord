@@ -31,6 +31,13 @@ const serialState: Omit<SerialSnapshot, "supported"> = {
   telemetry: null,
 };
 
+const serialSnapshot: SerialSnapshot = {
+  supported: isSerialSupported(),
+  status: isSerialSupported() ? serialState.status : "unsupported",
+  error: serialState.error,
+  telemetry: serialState.telemetry,
+};
+
 const listeners = new Set<() => void>();
 
 let port: any = null;
@@ -56,15 +63,16 @@ const setSerialState = (patch: Partial<typeof serialState>) => {
       changed = true;
     }
   });
-  if (changed) emit();
+  if (changed) {
+    serialSnapshot.supported = isSerialSupported();
+    serialSnapshot.status = isSerialSupported() ? serialState.status : "unsupported";
+    serialSnapshot.error = serialState.error;
+    serialSnapshot.telemetry = serialState.telemetry;
+    emit();
+  }
 };
 
-const getSnapshot = (): SerialSnapshot => ({
-  supported: isSerialSupported(),
-  status: isSerialSupported() ? serialState.status : "unsupported",
-  error: serialState.error,
-  telemetry: serialState.telemetry,
-});
+const getSnapshot = (): SerialSnapshot => serialSnapshot;
 
 const normalizeTelemetry = (value: unknown): Telemetry | null => {
   if (!value || typeof value !== "object") return null;
