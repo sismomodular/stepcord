@@ -31,6 +31,8 @@ const serialState: Omit<SerialSnapshot, "supported"> = {
   telemetry: null,
 };
 
+const isSerialSupported = () => typeof navigator !== "undefined" && "serial" in navigator;
+
 const serialSnapshot: SerialSnapshot = {
   supported: isSerialSupported(),
   status: isSerialSupported() ? serialState.status : "unsupported",
@@ -47,8 +49,6 @@ let readableStreamClosed: Promise<void> | null = null;
 let keepReading = false;
 let readLoopPromise: Promise<void> | null = null;
 let incomingBuffer = "";
-
-const isSerialSupported = () => typeof navigator !== "undefined" && "serial" in navigator;
 
 const emit = () => {
   listeners.forEach((listener) => listener());
