@@ -130,9 +130,21 @@ async function cleanupSerial(nextStatus: Status = "disconnected", nextError: str
   setSerialState({ status: nextStatus, error: nextError, telemetry: null });
 }
 
+const isInsideIframe = () => {
+  try { return typeof window !== "undefined" && window.self !== window.top; } catch { return true; }
+};
+
 async function connectSerial() {
   if (!isSerialSupported()) {
-    setSerialState({ status: "unsupported", error: "Web Serial não é suportado neste navegador." });
+    setSerialState({ status: "unsupported", error: "Web Serial não é suportado neste navegador. Usa Chrome/Edge no desktop." });
+    return;
+  }
+
+  if (isInsideIframe()) {
+    setSerialState({
+      status: "error",
+      error: "Web Serial está bloqueada dentro do preview embebido do Lovable. Abre a app numa aba nova (botão \"Abrir em nova aba\") ou usa o URL publicado.",
+    });
     return;
   }
 
