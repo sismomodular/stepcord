@@ -94,8 +94,8 @@ const normalizeTelemetry = (value: unknown): Telemetry | null => {
 };
 
 const handlePortDisconnect = () => {
-  console.warn("Porta serial desconectada.");
-  void cleanupSerial("disconnected", "Porta serial desconectada.");
+  console.warn("Serial port disconnected.");
+  void cleanupSerial("disconnected", "Serial port disconnected.");
 };
 
 async function cleanupSerial(nextStatus: Status = "disconnected", nextError: string | null = null) {
@@ -202,8 +202,8 @@ async function connectSerial() {
           }
         }
       } catch (error: any) {
-        console.error("Erro no loop de leitura:", error);
-        setSerialState({ error: error?.message ?? "Erro no loop de leitura" });
+        console.error("Read loop error:", error);
+        setSerialState({ error: error?.message ?? "Read loop error" });
       }
     })();
   } catch (error: any) {
@@ -221,11 +221,11 @@ async function sendHardwareCommand(payload: SerialCommand) {
   try {
     const jsonString = JSON.stringify(payload) + "\n";
     await writer.write(jsonString);
-    console.log("Comando enviado:", jsonString);
+    console.log("Command sent:", jsonString);
     setSerialState({ error: null });
   } catch (err: any) {
-    console.error("Erro ao enviar dados pela Serial:", err);
-    setSerialState({ error: err?.message ?? "Erro ao enviar dados pela Serial." });
+    console.error("Error sending data over Serial:", err);
+    setSerialState({ error: err?.message ?? "Error sending data over Serial." });
   }
 }
 
