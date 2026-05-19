@@ -136,14 +136,14 @@ const isInsideIframe = () => {
 
 async function connectSerial() {
   if (!isSerialSupported()) {
-    setSerialState({ status: "unsupported", error: "Web Serial não é suportado neste navegador. Usa Chrome/Edge no desktop." });
+    setSerialState({ status: "unsupported", error: "Web Serial is not supported in this browser. Use Chrome/Edge on desktop." });
     return;
   }
 
   if (isInsideIframe()) {
     setSerialState({
       status: "error",
-      error: "Web Serial está bloqueada dentro do preview embebido do Lovable. Abre a app numa aba nova (botão \"Abrir em nova aba\") ou usa o URL publicado.",
+      error: "Web Serial is blocked inside the embedded Lovable preview. Open the app in a new tab (\"Open in new tab\" button) or use the published URL.",
     });
     return;
   }
