@@ -17,8 +17,9 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <Routes>
-        <Route path="/" element={<Index />} />
+        <Route path="/" element={<Dashboard />} />
         <Route path="/dashboard" element={<Dashboard />} />
+        <Route path="/classic" element={<Index />} />
         <Route path="/test" element={<SerialTest />} />
         {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
