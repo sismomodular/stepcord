@@ -134,6 +134,25 @@ const Dashboard = () => {
           </div>
         </header>
 
+        {(() => {
+          let inIframe = false;
+          try { inIframe = typeof window !== "undefined" && window.self !== window.top; } catch { inIframe = true; }
+          if (!inIframe) return null;
+          return (
+            <div className="rounded-xl border border-warning/40 bg-warning/10 px-4 py-3 text-sm text-warning flex flex-wrap items-center justify-between gap-3">
+              <span>
+                <strong>Web Serial bloqueada no preview embebido.</strong> Abre numa aba nova para ligares ao PicoPD Pro.
+              </span>
+              <Button
+                onClick={() => window.open(window.location.href, "_blank", "noopener,noreferrer")}
+                className="hw-btn-primary gap-2 rounded-full px-4"
+              >
+                Abrir em nova aba
+              </Button>
+            </div>
+          );
+        })()}
+
         {error && (
           <div className="rounded-xl border border-destructive/40 bg-destructive/10 px-4 py-2.5 text-sm text-destructive">
             {error}
