@@ -112,7 +112,7 @@ const Dashboard = () => {
             </div>
             {connected ? (
               <Button onClick={() => void disconnect()} className="hw-btn gap-2 rounded-full">
-                <Cable className="h-4 w-4" /> Desconectar
+                <Cable className="h-4 w-4" /> Disconnect
               </Button>
             ) : (
               <Button
@@ -121,7 +121,7 @@ const Dashboard = () => {
                 className="hw-btn-primary gap-2 rounded-full px-5 font-bold"
               >
                 <Cable className="h-4 w-4" />
-                {status === "connecting" ? "A ligar…" : "Conectar StepCord"}
+                {status === "connecting" ? "Connecting…" : "Connect StepCord"}
               </Button>
             )}
           </div>
