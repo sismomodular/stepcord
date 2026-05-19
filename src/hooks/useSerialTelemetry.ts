@@ -42,16 +42,14 @@ const serialSnapshot: SerialSnapshot = {
 
 const listeners = new Set<() => void>();
 
+// Persistent connection refs
 let port: any = null;
 let reader: ReadableStreamDefaultReader<string> | null = null;
+let writer: WritableStreamDefaultWriter<string> | null = null;
 let readableStreamClosed: Promise<void> | null = null;
-let keepReading = false;
-let readLoopPromise: Promise<void> | null = null;
-let incomingBuffer = "";
+let writableStreamClosed: Promise<void> | null = null;
 
-const emit = () => {
-  listeners.forEach((listener) => listener());
-};
+const emit = () => listeners.forEach((l) => l());
 
 const setSerialState = (patch: Partial<typeof serialState>) => {
   let changed = false;
@@ -75,17 +73,13 @@ const getSnapshot = (): SerialSnapshot => serialSnapshot;
 
 const normalizeTelemetry = (value: unknown): Telemetry | null => {
   if (!value || typeof value !== "object") return null;
-
   const telemetry = { ...(value as Record<string, unknown>) } as Telemetry;
-
   if (typeof telemetry.v !== "number" && typeof telemetry.voltage === "number") telemetry.v = telemetry.voltage;
   if (typeof telemetry.i !== "number" && typeof telemetry.current === "number") telemetry.i = telemetry.current;
-
   if (typeof telemetry.v === "number" && typeof telemetry.i === "number") {
     if (typeof telemetry.p !== "number") telemetry.p = +(telemetry.v * telemetry.i).toFixed(2);
     return telemetry;
   }
-
   if (
     telemetry.device ||
     telemetry.state ||
@@ -96,180 +90,130 @@ const normalizeTelemetry = (value: unknown): Telemetry | null => {
   ) {
     return { v: 0, i: 0, p: 0, ...telemetry };
   }
-
   return null;
 };
 
-const parseIncomingChunk = (chunk: string) => {
-  incomingBuffer += chunk;
-
-  const lines = incomingBuffer.split(/\r?\n/);
-  incomingBuffer = lines.pop() ?? "";
-
-  const candidates = lines.map((line) => line.trim()).filter(Boolean);
-
-  let closingBraceIndex = incomingBuffer.indexOf("}");
-  while (closingBraceIndex >= 0) {
-    const candidate = incomingBuffer.slice(0, closingBraceIndex + 1).trim();
-    incomingBuffer = incomingBuffer.slice(closingBraceIndex + 1);
-    const jsonStart = candidate.indexOf("{");
-    if (jsonStart >= 0) candidates.push(candidate.slice(jsonStart));
-    closingBraceIndex = incomingBuffer.indexOf("}");
-  }
-
-  candidates.forEach((candidate) => {
-    try {
-      const parsed = JSON.parse(candidate);
-      const normalized = normalizeTelemetry(parsed);
-      if (normalized) {
-        setSerialState({ telemetry: normalized, error: null });
-      }
-    } catch {
-      // Ignora mensagens que não são JSON válido.
-    }
-  });
+const handlePortDisconnect = () => {
+  console.warn("Porta serial desconectada.");
+  void cleanupSerial("disconnected", "Porta serial desconectada.");
 };
 
-const cleanupSerial = async (nextStatus: Status = "disconnected", nextError: string | null = null) => {
-  keepReading = false;
-
-  const activeReader = reader;
-  reader = null;
-  if (activeReader) {
-    try {
-      await activeReader.cancel();
-    } catch {}
-    try {
-      activeReader.releaseLock();
-    } catch {}
+async function cleanupSerial(nextStatus: Status = "disconnected", nextError: string | null = null) {
+  // Cancel reader
+  if (reader) {
+    try { await reader.cancel(); } catch {}
+    try { reader.releaseLock(); } catch {}
+    reader = null;
   }
-
   if (readableStreamClosed) {
-    try {
-      await readableStreamClosed;
-    } catch {}
+    try { await readableStreamClosed.catch(() => {}); } catch {}
     readableStreamClosed = null;
   }
 
+  // Close writer
+  if (writer) {
+    try { await writer.close(); } catch {}
+    try { writer.releaseLock(); } catch {}
+    writer = null;
+  }
+  if (writableStreamClosed) {
+    try { await writableStreamClosed.catch(() => {}); } catch {}
+    writableStreamClosed = null;
+  }
+
   if (port) {
-    try {
-      port.status = "closed";
-    } catch {}
-    try {
-      port.removeEventListener?.("disconnect", handlePortDisconnect);
-    } catch {}
-    try {
-      await port.close();
-    } catch {}
+    try { port.removeEventListener?.("disconnect", handlePortDisconnect); } catch {}
+    try { await port.close(); } catch {}
     port = null;
   }
 
-  incomingBuffer = "";
   setSerialState({ status: nextStatus, error: nextError, telemetry: null });
-};
-
-async function inicializarLeitura() {
-  while (port && port.readable && keepReading) {
-    try {
-      const textDecoder = new TextDecoderStream();
-      readableStreamClosed = port.readable.pipeTo(textDecoder.writable);
-      reader = textDecoder.readable.getReader();
-
-      while (true) {
-        const { value, done } = await reader.read();
-
-        if (done) {
-          try {
-            reader.releaseLock();
-          } catch {}
-          reader = null;
-          break;
-        }
-
-        if (value) {
-          console.log("Dados vindos do PicoPD:", value);
-          parseIncomingChunk(value);
-        }
-      }
-    } catch (error: any) {
-      console.error("Erro no loop de leitura:", error);
-      setSerialState({ error: error?.message ?? "Erro no loop de leitura" });
-      break;
-    }
-  }
-
-  if (keepReading) {
-    await cleanupSerial("disconnected", serialState.error);
-  }
 }
 
-function handlePortDisconnect() {
-  console.warn("Porta serial desconectada.");
-  void cleanupSerial("disconnected", "Porta serial desconectada.");
-}
-
-async function conectarSerial() {
+async function connectSerial() {
   if (!isSerialSupported()) {
     setSerialState({ status: "unsupported", error: "Web Serial não é suportado neste navegador." });
     return;
   }
 
-  if (port) {
-    await cleanupSerial();
-  }
+  if (port) await cleanupSerial();
 
   try {
     setSerialState({ status: "connecting", error: null, telemetry: null });
 
+    // 1. Request port (must be from user gesture)
     port = await (navigator as any).serial.requestPort();
+    await port.open({ baudRate: 115200 });
     port.addEventListener?.("disconnect", handlePortDisconnect);
 
-    await port.open({ baudRate: 115200 });
-    port.status = "open";
-    console.log("Porta Serial aberta com sucesso!");
+    // 2. Decoder for inbound bytes -> text
+    const textDecoder = new TextDecoderStream();
+    readableStreamClosed = port.readable.pipeTo(textDecoder.writable);
+    reader = textDecoder.readable.getReader();
 
-    if (!port.writable) {
-      throw new Error("Canal de escrita indisponível na porta serial.");
-    }
+    // 3. Encoder for outbound text -> bytes (persistent writer)
+    const textEncoder = new TextEncoderStream();
+    writableStreamClosed = textEncoder.readable.pipeTo(port.writable);
+    writer = textEncoder.writable.getWriter();
 
-    keepReading = true;
+    console.log("Serial port opened successfully!");
     setSerialState({ status: "connected", error: null });
 
-    if (!readLoopPromise) {
-      readLoopPromise = inicializarLeitura().finally(() => {
-        readLoopPromise = null;
-      });
-    }
+    // 4. Read loop (line-by-line)
+    let serialBuffer = "";
+    (async () => {
+      try {
+        while (true) {
+          const { value, done } = await reader!.read();
+          if (done) {
+            try { reader?.releaseLock(); } catch {}
+            break;
+          }
+          if (value) {
+            serialBuffer += value;
+            if (serialBuffer.includes("\n")) {
+              const lines = serialBuffer.split("\n");
+              serialBuffer = lines.pop() || "";
+              for (const line of lines) {
+                const cleanLine = line.trim();
+                if (cleanLine.startsWith("{") && cleanLine.endsWith("}")) {
+                  try {
+                    const parsed = JSON.parse(cleanLine);
+                    const normalized = normalizeTelemetry(parsed);
+                    if (normalized) setSerialState({ telemetry: normalized, error: null });
+                  } catch (e) {
+                    console.error("Failed to parse JSON line:", cleanLine, e);
+                  }
+                }
+              }
+            }
+          }
+        }
+      } catch (error: any) {
+        console.error("Erro no loop de leitura:", error);
+        setSerialState({ error: error?.message ?? "Erro no loop de leitura" });
+      }
+    })();
   } catch (error: any) {
-    console.error("Erro ao conectar à porta serial:", error);
+    console.error("Serial connection failed:", error);
     await cleanupSerial("error", error?.message ?? "Falha ao conectar à porta serial.");
   }
 }
 
 async function sendHardwareCommand(payload: SerialCommand) {
-  if (!port || port.status !== "open") {
-    console.error("A porta Serial não está aberta. Conecte primeiro!");
+  if (!writer) {
+    console.error("Writer indisponível. Conecte primeiro!");
     setSerialState({ error: "A porta Serial não está aberta. Conecte primeiro!" });
     return;
   }
-
-  let localWriter: WritableStreamDefaultWriter<Uint8Array> | null = null;
-
   try {
-    const encoder = new TextEncoder();
     const jsonString = JSON.stringify(payload) + "\n";
-    localWriter = port.writable.getWriter();
-
-    await localWriter.write(encoder.encode(jsonString));
-    console.log("Comando enviado com sucesso:", jsonString);
+    await writer.write(jsonString);
+    console.log("Comando enviado:", jsonString);
     setSerialState({ error: null });
   } catch (err: any) {
-    console.error("Erro crítico ao enviar dados pela Serial:", err);
-    setSerialState({ error: err?.message ?? "Erro crítico ao enviar dados pela Serial." });
-  } finally {
-    try {
-      localWriter?.releaseLock();
-    } catch {}
+    console.error("Erro ao enviar dados pela Serial:", err);
+    setSerialState({ error: err?.message ?? "Erro ao enviar dados pela Serial." });
   }
 }
 
@@ -300,7 +244,7 @@ export function useSerialTelemetry() {
     status: snapshot.status,
     error: snapshot.error,
     telemetry: snapshot.telemetry,
-    connect: conectarSerial,
+    connect: connectSerial,
     disconnect: desconectarSerial,
     send: sendHardwareCommand,
   };
