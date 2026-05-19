@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
-import { Cable, CheckCircle2, Power, Zap, ArrowLeft, SlidersHorizontal, ShieldAlert, Radio } from "lucide-react";
+import { Cable, CheckCircle2, Power, Zap, SlidersHorizontal, ShieldAlert, Radio } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { useSerialTelemetry } from "@/hooks/useSerialTelemetry";
