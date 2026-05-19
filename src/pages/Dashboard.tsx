@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
-import { Cable, CheckCircle2, Power, Zap, ArrowLeft, SlidersHorizontal, ShieldAlert, Radio } from "lucide-react";
+import { Cable, CheckCircle2, Power, Zap, SlidersHorizontal, ShieldAlert, Radio } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { useSerialTelemetry } from "@/hooks/useSerialTelemetry";
@@ -125,12 +124,6 @@ const Dashboard = () => {
                 {status === "connecting" ? "A ligar…" : "Conectar StepCord"}
               </Button>
             )}
-            <Link
-              to="/classic"
-              className="hw-btn inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-semibold"
-            >
-              <ArrowLeft className="h-3.5 w-3.5" /> Classic UI
-            </Link>
           </div>
         </header>
 
