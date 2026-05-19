@@ -208,14 +208,14 @@ async function connectSerial() {
     })();
   } catch (error: any) {
     console.error("Serial connection failed:", error);
-    await cleanupSerial("error", error?.message ?? "Falha ao conectar à porta serial.");
+    await cleanupSerial("error", error?.message ?? "Failed to connect to the serial port.");
   }
 }
 
 async function sendHardwareCommand(payload: SerialCommand) {
   if (!writer) {
-    console.error("Writer indisponível. Conecte primeiro!");
-    setSerialState({ error: "A porta Serial não está aberta. Conecte primeiro!" });
+    console.error("Writer unavailable. Connect first!");
+    setSerialState({ error: "The serial port is not open. Connect first!" });
     return;
   }
   try {
