@@ -134,13 +134,13 @@ const Dashboard = () => {
           return (
             <div className="rounded-xl border border-warning/40 bg-warning/10 px-4 py-3 text-sm text-warning flex flex-wrap items-center justify-between gap-3">
               <span>
-                <strong>Web Serial bloqueada no preview embebido.</strong> Abre numa aba nova para ligares ao PicoPD Pro.
+                <strong>Web Serial is blocked inside the embedded preview.</strong> Open in a new tab to connect to the PicoPD Pro.
               </span>
               <Button
                 onClick={() => window.open(window.location.href, "_blank", "noopener,noreferrer")}
                 className="hw-btn-primary gap-2 rounded-full px-4"
               >
-                Abrir em nova aba
+                Open in new tab
               </Button>
             </div>
           );
