@@ -94,8 +94,8 @@ const normalizeTelemetry = (value: unknown): Telemetry | null => {
 };
 
 const handlePortDisconnect = () => {
-  console.warn("Porta serial desconectada.");
-  void cleanupSerial("disconnected", "Porta serial desconectada.");
+  console.warn("Serial port disconnected.");
+  void cleanupSerial("disconnected", "Serial port disconnected.");
 };
 
 async function cleanupSerial(nextStatus: Status = "disconnected", nextError: string | null = null) {
@@ -136,14 +136,14 @@ const isInsideIframe = () => {
 
 async function connectSerial() {
   if (!isSerialSupported()) {
-    setSerialState({ status: "unsupported", error: "Web Serial não é suportado neste navegador. Usa Chrome/Edge no desktop." });
+    setSerialState({ status: "unsupported", error: "Web Serial is not supported in this browser. Use Chrome/Edge on desktop." });
     return;
   }
 
   if (isInsideIframe()) {
     setSerialState({
       status: "error",
-      error: "Web Serial está bloqueada dentro do preview embebido do Lovable. Abre a app numa aba nova (botão \"Abrir em nova aba\") ou usa o URL publicado.",
+      error: "Web Serial is blocked inside the embedded Lovable preview. Open the app in a new tab (\"Open in new tab\" button) or use the published URL.",
     });
     return;
   }
@@ -202,30 +202,30 @@ async function connectSerial() {
           }
         }
       } catch (error: any) {
-        console.error("Erro no loop de leitura:", error);
-        setSerialState({ error: error?.message ?? "Erro no loop de leitura" });
+        console.error("Read loop error:", error);
+        setSerialState({ error: error?.message ?? "Read loop error" });
       }
     })();
   } catch (error: any) {
     console.error("Serial connection failed:", error);
-    await cleanupSerial("error", error?.message ?? "Falha ao conectar à porta serial.");
+    await cleanupSerial("error", error?.message ?? "Failed to connect to the serial port.");
   }
 }
 
 async function sendHardwareCommand(payload: SerialCommand) {
   if (!writer) {
-    console.error("Writer indisponível. Conecte primeiro!");
-    setSerialState({ error: "A porta Serial não está aberta. Conecte primeiro!" });
+    console.error("Writer unavailable. Connect first!");
+    setSerialState({ error: "The serial port is not open. Connect first!" });
     return;
   }
   try {
     const jsonString = JSON.stringify(payload) + "\n";
     await writer.write(jsonString);
-    console.log("Comando enviado:", jsonString);
+    console.log("Command sent:", jsonString);
     setSerialState({ error: null });
   } catch (err: any) {
-    console.error("Erro ao enviar dados pela Serial:", err);
-    setSerialState({ error: err?.message ?? "Erro ao enviar dados pela Serial." });
+    console.error("Error sending data over Serial:", err);
+    setSerialState({ error: err?.message ?? "Error sending data over Serial." });
   }
 }
 

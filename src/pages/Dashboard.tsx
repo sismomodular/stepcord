@@ -112,7 +112,7 @@ const Dashboard = () => {
             </div>
             {connected ? (
               <Button onClick={() => void disconnect()} className="hw-btn gap-2 rounded-full">
-                <Cable className="h-4 w-4" /> Desconectar
+                <Cable className="h-4 w-4" /> Disconnect
               </Button>
             ) : (
               <Button
@@ -121,7 +121,7 @@ const Dashboard = () => {
                 className="hw-btn-primary gap-2 rounded-full px-5 font-bold"
               >
                 <Cable className="h-4 w-4" />
-                {status === "connecting" ? "A ligar…" : "Conectar StepCord"}
+                {status === "connecting" ? "Connecting…" : "Connect StepCord"}
               </Button>
             )}
           </div>
@@ -134,13 +134,13 @@ const Dashboard = () => {
           return (
             <div className="rounded-xl border border-warning/40 bg-warning/10 px-4 py-3 text-sm text-warning flex flex-wrap items-center justify-between gap-3">
               <span>
-                <strong>Web Serial bloqueada no preview embebido.</strong> Abre numa aba nova para ligares ao PicoPD Pro.
+                <strong>Web Serial is blocked inside the embedded preview.</strong> Open in a new tab to connect to the PicoPD Pro.
               </span>
               <Button
                 onClick={() => window.open(window.location.href, "_blank", "noopener,noreferrer")}
                 className="hw-btn-primary gap-2 rounded-full px-4"
               >
-                Abrir em nova aba
+                Open in new tab
               </Button>
             </div>
           );
