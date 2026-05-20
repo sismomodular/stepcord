@@ -6,14 +6,16 @@ import { useEffect, useSyncExternalStore } from "react";
 // Wire protocol
 // -------------
 // Host  → Pico : single CSV line per command, newline terminated:
-//                  "<stateId>,<voltage>,<current>\n"
+//                  "<stateId>,<voltageInt>,<current1dp>\n"   e.g. "3,9,3.0\n"
 //                stateId: 0=SELECTING, 1=FINE_TUNING, 2=POLARITY_CHECK, 3=LOCKED
-//                voltage / current : decimal volts / amps
+//                voltage : integer volts (rounded)
+//                current : amps, 1 decimal place
 //
 // Pico → Host : newline-delimited lines, any of:
 //                  "ENC:CW"       → encoder rotated clockwise  → DOWN
 //                  "ENC:CCW"      → encoder rotated counter-CW → UP
 //                  "BTN:ENTER"    → push button pressed
+//                  "ST:<id>,<v>,<i>"  → hardware status echo (id 3 = LOCKED/active)
 //                  '{"button":"UP|DOWN|ENTER"}'   (legacy JSON)
 //                  '{...telemetry json...}'       (optional live telemetry)
 // ----------------------------------------------------------------------------
@@ -195,6 +197,29 @@ const handleLine = (raw: string) => {
     return;
   }
 
+  // Hardware status echo: "ST:<stateId>,<voltage>,<current>"
+  if (line.startsWith("ST:")) {
+    const body = line.slice(3);
+    const parts = body.split(",");
+    const sid = parseInt(parts[0], 10);
+    const v = Number(parts[1]);
+    const i = Number(parts[2]);
+    const stateName = Number.isFinite(sid) && sid >= 0 && sid < STATES.length ? STATES[sid] : undefined;
+    setState({
+      telemetry: {
+        v: Number.isFinite(v) ? v : 0,
+        i: Number.isFinite(i) ? i : 0,
+        p: Number.isFinite(v) && Number.isFinite(i) ? +(v * i).toFixed(2) : 0,
+        voltage: Number.isFinite(v) ? v : 0,
+        current: Number.isFinite(i) ? i : 0,
+        state: stateName,
+        remote: sid === 3,
+      },
+      error: null,
+    });
+    return;
+  }
+
   // JSON: button event or telemetry
   if (line.startsWith("{")) {
     try {
@@ -318,7 +343,7 @@ async function sendHardwareCommand(payload: SerialCommand) {
     const stateId = stateToId(payload.state);
     const voltage = Number(payload.voltage ?? 0);
     const current = Number(payload.current ?? 0);
-    const line = `${stateId},${voltage.toFixed(2)},${current.toFixed(2)}\n`;
+    const line = `${stateId},${Math.round(voltage)},${current.toFixed(1)}\n`;
     await writer.write(new TextEncoder().encode(line));
     console.log("Serial sent:", line.trim());
     setState({ error: null });
