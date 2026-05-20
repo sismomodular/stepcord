@@ -41,6 +41,12 @@ const serialSnapshot: SerialSnapshot = {
 };
 
 const listeners = new Set<() => void>();
+export type HardwareButton = "UP" | "DOWN" | "ENTER";
+const buttonListeners = new Set<(b: HardwareButton) => void>();
+export const onHardwareButton = (cb: (b: HardwareButton) => void) => {
+  buttonListeners.add(cb);
+  return () => { buttonListeners.delete(cb); };
+};
 
 // Persistent connection refs
 let port: any = null;
@@ -191,8 +197,15 @@ async function connectSerial() {
                 if (cleanLine.startsWith("{") && cleanLine.endsWith("}")) {
                   try {
                     const parsed = JSON.parse(cleanLine);
-                    const normalized = normalizeTelemetry(parsed);
-                    if (normalized) setSerialState({ telemetry: normalized, error: null });
+                    if (parsed && typeof parsed === "object" && typeof (parsed as any).button === "string") {
+                      const b = String((parsed as any).button).toUpperCase();
+                      if (b === "UP" || b === "DOWN" || b === "ENTER") {
+                        buttonListeners.forEach((cb) => { try { cb(b as HardwareButton); } catch {} });
+                      }
+                    } else {
+                      const normalized = normalizeTelemetry(parsed);
+                      if (normalized) setSerialState({ telemetry: normalized, error: null });
+                    }
                   } catch (e) {
                     console.error("Failed to parse JSON line:", cleanLine, e);
                   }

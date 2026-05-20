@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Cable, CheckCircle2, Power, Zap, SlidersHorizontal, ShieldAlert, Radio } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
-import { useSerialTelemetry } from "@/hooks/useSerialTelemetry";
+import { useSerialTelemetry, onHardwareButton } from "@/hooks/useSerialTelemetry";
 import {
   DEVICES,
   MANUAL_IDX,
@@ -14,18 +14,11 @@ import myVoltsLogo from "@/assets/myvolts-logo.png";
 
 type DeviceState = "SELECTING" | "FINE_TUNING" | "LOCKED" | "DISCONNECTED";
 
-const normalizeState = (raw: string | undefined, connected: boolean): DeviceState => {
-  if (!connected) return "DISCONNECTED";
-  const up = (raw ?? "").toUpperCase();
-  if (up === "LOCKED" || up === "ACTIVE" || up === "OUTPUT") return "LOCKED";
-  if (up === "FINE_TUNING" || up === "MANUAL" || up === "FINE") return "FINE_TUNING";
-  return "SELECTING";
-};
-
 const Dashboard = () => {
   const { supported, status, error, telemetry, connect, disconnect, send } = useSerialTelemetry();
   const [selectedIdx, setSelectedIdx] = useState<number | null>(null);
   const [manualV, setManualV] = useState<number>(5.0);
+  const [armed, setArmed] = useState<boolean>(false);
 
   useEffect(() => {
     const html = document.documentElement;
@@ -34,55 +27,98 @@ const Dashboard = () => {
     return () => { if (!had) html.classList.remove("dark"); };
   }, []);
 
-  // Mirror device-pushed state into the UI immediately (UI updates must NOT trigger commands).
-  useEffect(() => {
-    if (typeof telemetry?.profile === "number") setSelectedIdx(telemetry.profile);
-  }, [telemetry?.profile]);
-
   const connected = status === "connected";
-  const deviceState = normalizeState(telemetry?.state, connected);
+  const isManual = selectedIdx === MANUAL_IDX;
+  const profileConfirmed = selectedIdx !== null;
+
+  // Derive the canonical UI state — the React app is now the source of truth.
+  const deviceState: DeviceState = !connected
+    ? "DISCONNECTED"
+    : armed
+    ? "LOCKED"
+    : isManual
+    ? "FINE_TUNING"
+    : "SELECTING";
+
   const isLocked = deviceState === "LOCKED";
   const isFineTuning = deviceState === "FINE_TUNING";
   const isSelecting = deviceState === "SELECTING";
-  const profileConfirmed = selectedIdx !== null;
-  const isManual = selectedIdx === MANUAL_IDX;
+
+  // Build the unified payload from local state.
+  const buildPayload = useCallback((stateOverride?: DeviceState, idxOverride?: number | null, vOverride?: number) => {
+    const idx = idxOverride ?? selectedIdx;
+    if (idx == null) return null;
+    const d = DEVICES[idx];
+    const manual = idx === MANUAL_IDX;
+    const volt = manual ? (vOverride ?? manualV) : d.voltage;
+    const state = stateOverride ?? deviceState;
+    const protocol = manual || state === "FINE_TUNING" ? "[PPS]" : "[PD]";
+    return {
+      device: String(d.name).slice(0, 16),
+      voltage: Number(volt.toFixed(2)),
+      current: Number(d.current.toFixed(2)),
+      polarity: d.polarityLabel,
+      protocol,
+      state,
+    };
+  }, [selectedIdx, manualV, deviceState]);
+
+  const sendSync = useCallback((stateOverride?: DeviceState, idxOverride?: number | null, vOverride?: number) => {
+    if (!connected) return;
+    const payload = buildPayload(stateOverride, idxOverride, vOverride);
+    if (payload) void send(payload);
+  }, [connected, buildPayload, send]);
 
   const pickProfile = useCallback((idx: number) => {
-    if (isLocked) return; // safety: no profile changes while output is live
+    if (isLocked) return;
     setSelectedIdx(idx);
-    if (idx === MANUAL_IDX) {
-      void send({ setProfile: Number(MANUAL_IDX), manualVolt: Number(manualV.toFixed(1)) });
-    } else {
-      void send({ setProfile: Number(idx) });
-    }
-  }, [isLocked, send, manualV]);
+    const nextState: DeviceState = idx === MANUAL_IDX ? "FINE_TUNING" : "SELECTING";
+    sendSync(nextState, idx);
+  }, [isLocked, sendSync]);
 
   const onManualVoltChange = useCallback((v: number) => {
     const clamped = Math.min(MANUAL_MAX_V, Math.max(MANUAL_MIN_V, Math.round(v * 10) / 10));
     setManualV(clamped);
-    if (isManual && connected && !isLocked) {
-      void send({ setProfile: Number(MANUAL_IDX), manualVolt: Number(clamped.toFixed(1)) });
-    }
-  }, [isManual, connected, isLocked, send]);
+    if (isManual && !isLocked) sendSync("FINE_TUNING", MANUAL_IDX, clamped);
+  }, [isManual, isLocked, sendSync]);
 
   const togglePower = useCallback(() => {
-    if (isLocked) {
-      void send({ setOutput: 0 });
-    } else if (profileConfirmed) {
-      void send({ setOutput: 1 });
-    }
-  }, [isLocked, profileConfirmed, send]);
+    if (!connected || !profileConfirmed) return;
+    const next = !armed;
+    setArmed(next);
+    const nextState: DeviceState = next ? "LOCKED" : (isManual ? "FINE_TUNING" : "SELECTING");
+    sendSync(nextState);
+  }, [connected, profileConfirmed, armed, isManual, sendSync]);
 
-  const deviceName = telemetry?.device ?? (selectedIdx != null ? DEVICES[selectedIdx].name : "—");
-  const voltage = telemetry?.v ?? (isManual ? manualV : selectedIdx != null ? DEVICES[selectedIdx].voltage : 0);
-  const current = telemetry?.i ?? (selectedIdx != null ? DEVICES[selectedIdx].current : 0);
-  const polarity = telemetry?.polarity ?? (selectedIdx != null ? DEVICES[selectedIdx].polarityLabel : "—");
+  // Listen for physical button events from hardware.
+  const selectedRef = useRef(selectedIdx);
+  const armedRef = useRef(armed);
+  useEffect(() => { selectedRef.current = selectedIdx; }, [selectedIdx]);
+  useEffect(() => { armedRef.current = armed; }, [armed]);
+
+  useEffect(() => {
+    return onHardwareButton((b) => {
+      if (b === "ENTER") { togglePower(); return; }
+      if (armedRef.current) return; // ignore navigation when locked
+      const cur = selectedRef.current ?? -1;
+      const len = DEVICES.length;
+      const next = b === "UP" ? (cur <= 0 ? len - 1 : cur - 1) : (cur + 1) % len;
+      pickProfile(next);
+    });
+  }, [togglePower, pickProfile]);
+
+  // On (re)connect, push the current state once so hardware OLED matches the UI.
+  useEffect(() => {
+    if (connected && selectedIdx != null) sendSync();
+  }, [connected]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const deviceName = selectedIdx != null ? DEVICES[selectedIdx].name : "—";
+  const voltage = isManual ? manualV : selectedIdx != null ? DEVICES[selectedIdx].voltage : 0;
+  const current = selectedIdx != null ? DEVICES[selectedIdx].current : 0;
+  const polarity = selectedIdx != null ? DEVICES[selectedIdx].polarityLabel : "—";
   const remote = telemetry?.remote ?? false;
 
-  const protocolBadge = useMemo(() => {
-    if (isFineTuning || isManual) return "[PPS]";
-    return "[PD]";
-  }, [isFineTuning, isManual]);
+  const protocolBadge = useMemo(() => (isFineTuning || isManual ? "[PPS]" : "[PD]"), [isFineTuning, isManual]);
 
   const headerStatus = useMemo(() => {
     if (deviceState === "LOCKED") return { text: "POWER OUTPUT: ACTIVE", tone: "locked" as const };
@@ -235,7 +271,7 @@ const Dashboard = () => {
               }`}
             >
               <Power className="mr-2 h-5 w-5" />
-              {isLocked ? "CUT POWER (setOutput: 0)" : "DEPLOY POWER (setOutput: 1)"}
+              {isLocked ? "CUT POWER" : "DEPLOY POWER (ARM)"}
             </Button>
           </div>
         </section>
@@ -278,7 +314,7 @@ const Dashboard = () => {
             <div>
               <h2 className="text-sm font-bold uppercase tracking-wider">Device Profiles</h2>
               <p className="text-xs text-muted-foreground">
-                Tap to send <span className="font-mono-tech">{`{"setProfile": N}`}</span> over serial.
+                Tap to stream a full <span className="font-mono-tech">{`{device,voltage,current,polarity,protocol,state}`}</span> frame over serial.
               </p>
             </div>
             {isLocked && (
