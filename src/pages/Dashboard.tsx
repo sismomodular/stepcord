@@ -314,7 +314,7 @@ const Dashboard = () => {
             <div>
               <h2 className="text-sm font-bold uppercase tracking-wider">Device Profiles</h2>
               <p className="text-xs text-muted-foreground">
-                Tap to send <span className="font-mono-tech">{`{"setProfile": N}`}</span> over serial.
+                Tap to stream a full <span className="font-mono-tech">{`{device,voltage,current,polarity,protocol,state}`}</span> frame over serial.
               </p>
             </div>
             {isLocked && (
