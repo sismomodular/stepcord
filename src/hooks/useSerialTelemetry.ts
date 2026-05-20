@@ -197,8 +197,15 @@ async function connectSerial() {
                 if (cleanLine.startsWith("{") && cleanLine.endsWith("}")) {
                   try {
                     const parsed = JSON.parse(cleanLine);
-                    const normalized = normalizeTelemetry(parsed);
-                    if (normalized) setSerialState({ telemetry: normalized, error: null });
+                    if (parsed && typeof parsed === "object" && typeof (parsed as any).button === "string") {
+                      const b = String((parsed as any).button).toUpperCase();
+                      if (b === "UP" || b === "DOWN" || b === "ENTER") {
+                        buttonListeners.forEach((cb) => { try { cb(b as HardwareButton); } catch {} });
+                      }
+                    } else {
+                      const normalized = normalizeTelemetry(parsed);
+                      if (normalized) setSerialState({ telemetry: normalized, error: null });
+                    }
                   } catch (e) {
                     console.error("Failed to parse JSON line:", cleanLine, e);
                   }
