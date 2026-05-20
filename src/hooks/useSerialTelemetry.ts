@@ -289,7 +289,7 @@ async function connectSerial() {
 
     // Decode incoming bytes as UTF-8 text stream.
     const textDecoder = new TextDecoderStream();
-    readableClosed = picked.readable!.pipeTo(textDecoder.writable).catch(() => {});
+    readableClosed = picked.readable!.pipeTo(textDecoder.writable as unknown as WritableStream<Uint8Array>).catch(() => {});
     void readLoop(textDecoder.readable);
 
     // Writer for outbound CSV commands.
