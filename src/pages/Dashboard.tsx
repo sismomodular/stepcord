@@ -271,7 +271,7 @@ const Dashboard = () => {
               }`}
             >
               <Power className="mr-2 h-5 w-5" />
-              {isLocked ? "CUT POWER (setOutput: 0)" : "DEPLOY POWER (setOutput: 1)"}
+              {isLocked ? "CUT POWER" : "DEPLOY POWER (ARM)"}
             </Button>
           </div>
         </section>
