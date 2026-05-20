@@ -197,6 +197,29 @@ const handleLine = (raw: string) => {
     return;
   }
 
+  // Hardware status echo: "ST:<stateId>,<voltage>,<current>"
+  if (line.startsWith("ST:")) {
+    const body = line.slice(3);
+    const parts = body.split(",");
+    const sid = parseInt(parts[0], 10);
+    const v = Number(parts[1]);
+    const i = Number(parts[2]);
+    const stateName = Number.isFinite(sid) && sid >= 0 && sid < STATES.length ? STATES[sid] : undefined;
+    setState({
+      telemetry: {
+        v: Number.isFinite(v) ? v : 0,
+        i: Number.isFinite(i) ? i : 0,
+        p: Number.isFinite(v) && Number.isFinite(i) ? +(v * i).toFixed(2) : 0,
+        voltage: Number.isFinite(v) ? v : 0,
+        current: Number.isFinite(i) ? i : 0,
+        state: stateName,
+        remote: sid === 3,
+      },
+      error: null,
+    });
+    return;
+  }
+
   // JSON: button event or telemetry
   if (line.startsWith("{")) {
     try {
