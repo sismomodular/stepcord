@@ -6,14 +6,16 @@ import { useEffect, useSyncExternalStore } from "react";
 // Wire protocol
 // -------------
 // Host  → Pico : single CSV line per command, newline terminated:
-//                  "<stateId>,<voltage>,<current>\n"
+//                  "<stateId>,<voltageInt>,<current1dp>\n"   e.g. "3,9,3.0\n"
 //                stateId: 0=SELECTING, 1=FINE_TUNING, 2=POLARITY_CHECK, 3=LOCKED
-//                voltage / current : decimal volts / amps
+//                voltage : integer volts (rounded)
+//                current : amps, 1 decimal place
 //
 // Pico → Host : newline-delimited lines, any of:
 //                  "ENC:CW"       → encoder rotated clockwise  → DOWN
 //                  "ENC:CCW"      → encoder rotated counter-CW → UP
 //                  "BTN:ENTER"    → push button pressed
+//                  "ST:<id>,<v>,<i>"  → hardware status echo (id 3 = LOCKED/active)
 //                  '{"button":"UP|DOWN|ENTER"}'   (legacy JSON)
 //                  '{...telemetry json...}'       (optional live telemetry)
 // ----------------------------------------------------------------------------
