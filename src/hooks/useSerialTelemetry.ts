@@ -41,6 +41,12 @@ const serialSnapshot: SerialSnapshot = {
 };
 
 const listeners = new Set<() => void>();
+export type HardwareButton = "UP" | "DOWN" | "ENTER";
+const buttonListeners = new Set<(b: HardwareButton) => void>();
+export const onHardwareButton = (cb: (b: HardwareButton) => void) => {
+  buttonListeners.add(cb);
+  return () => { buttonListeners.delete(cb); };
+};
 
 // Persistent connection refs
 let port: any = null;
