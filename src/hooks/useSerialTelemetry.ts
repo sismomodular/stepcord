@@ -1,5 +1,24 @@
 import { useEffect, useSyncExternalStore } from "react";
 
+// --- Minimal WebHID type shims (Chrome/Edge only) ---------------------------
+type HIDDeviceFilter = { vendorId?: number; productId?: number; usagePage?: number; usage?: number };
+type HIDInputReportEvent = Event & { device: HIDDevice; reportId: number; data: DataView };
+type HIDConnectionEvent = Event & { device: HIDDevice };
+type HIDDevice = EventTarget & {
+  readonly opened: boolean;
+  readonly productName: string;
+  oninputreport: ((this: HIDDevice, ev: HIDInputReportEvent) => unknown) | null;
+  open(): Promise<void>;
+  close(): Promise<void>;
+  sendReport(reportId: number, data: BufferSource): Promise<void>;
+};
+type HID = EventTarget & {
+  requestDevice(options: { filters: HIDDeviceFilter[] }): Promise<HIDDevice[]>;
+  getDevices(): Promise<HIDDevice[]>;
+  addEventListener(type: "connect" | "disconnect", listener: (ev: HIDConnectionEvent) => unknown): void;
+  removeEventListener(type: "connect" | "disconnect", listener: (ev: HIDConnectionEvent) => unknown): void;
+};
+
 // ----------------------------------------------------------------------------
 // WebHID transport for the PicoPD Pro.
 // The hook name (`useSerialTelemetry`) and exported API are kept identical so
