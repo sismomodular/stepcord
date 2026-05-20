@@ -1,29 +1,21 @@
 import { useEffect, useSyncExternalStore } from "react";
 
-// --- Minimal WebHID type shims (Chrome/Edge only) ---------------------------
-type HIDDeviceFilter = { vendorId?: number; productId?: number; usagePage?: number; usage?: number };
-type HIDInputReportEvent = Event & { device: HIDDevice; reportId: number; data: DataView };
-type HIDConnectionEvent = Event & { device: HIDDevice };
-type HIDDevice = EventTarget & {
-  readonly opened: boolean;
-  readonly productName: string;
-  oninputreport: ((this: HIDDevice, ev: HIDInputReportEvent) => unknown) | null;
-  open(): Promise<void>;
-  close(): Promise<void>;
-  sendReport(reportId: number, data: BufferSource): Promise<void>;
-};
-type HID = EventTarget & {
-  requestDevice(options: { filters: HIDDeviceFilter[] }): Promise<HIDDevice[]>;
-  getDevices(): Promise<HIDDevice[]>;
-  addEventListener(type: "connect" | "disconnect", listener: (ev: HIDConnectionEvent) => unknown): void;
-  removeEventListener(type: "connect" | "disconnect", listener: (ev: HIDConnectionEvent) => unknown): void;
-};
-
 // ----------------------------------------------------------------------------
-// WebHID transport for the PicoPD Pro.
-// The hook name (`useSerialTelemetry`) and exported API are kept identical so
-// the Dashboard does not need to change. Under the hood we now speak HID with
-// fixed-size binary reports instead of newline-delimited JSON over Web Serial.
+// Web Serial transport for the PicoPD Pro.
+//
+// Wire protocol
+// -------------
+// Host  → Pico : single CSV line per command, newline terminated:
+//                  "<stateId>,<voltage>,<current>\n"
+//                stateId: 0=SELECTING, 1=FINE_TUNING, 2=POLARITY_CHECK, 3=LOCKED
+//                voltage / current : decimal volts / amps
+//
+// Pico → Host : newline-delimited lines, any of:
+//                  "ENC:CW"       → encoder rotated clockwise  → DOWN
+//                  "ENC:CCW"      → encoder rotated counter-CW → UP
+//                  "BTN:ENTER"    → push button pressed
+//                  '{"button":"UP|DOWN|ENTER"}'   (legacy JSON)
+//                  '{...telemetry json...}'       (optional live telemetry)
 // ----------------------------------------------------------------------------
 
 export type Telemetry = {
@@ -51,33 +43,14 @@ type Snapshot = {
   telemetry: Telemetry | null;
 };
 
-// --- HID protocol mapping ---------------------------------------------------
-// Output report (host → device), 63 bytes (Report ID = 0):
-//   byte 0 : stateId (0=SELECTING, 1=FINE_TUNING, 2=POLARITY_CHECK, 3=LOCKED)
-//   byte 1 : voltage * 10  (e.g. 90 = 9.0V, 120 = 12.0V, 205 = 20.5V)
-//   byte 2 : current * 10  (e.g. 30 = 3.0A)
-//   byte 3 : output enable (0 = cut, 1 = deploy, 0xFF = unchanged)
-//   byte 4 : polarity (0 = center +, 1 = center −)
-//   byte 5 : profile index (0xFF = not provided)
-//
-// Input report (device → host), 64 bytes via `event.data` DataView:
-//   byte 0 : stateId
-//   byte 1 : voltage * 10
-//   byte 2 : current * 10
-//   byte 3 : button event (0 = none, 1 = UP, 2 = DOWN, 3 = ENTER)
-//   byte 4 : remote/webModeActive flag (0/1)
-//   byte 5 : profile index
-// ----------------------------------------------------------------------------
-
 const STATES = ["SELECTING", "FINE_TUNING", "POLARITY_CHECK", "LOCKED"] as const;
 const stateToId = (s: unknown): number => {
   const idx = STATES.indexOf(String(s).toUpperCase() as (typeof STATES)[number]);
   return idx >= 0 ? idx : 0;
 };
-const polarityToByte = (p: unknown): number =>
-  typeof p === "string" && p.toUpperCase().includes("INVERT") ? 1 : 0;
 
-const isHidSupported = () => typeof navigator !== "undefined" && "hid" in navigator;
+const isSerialSupported = () =>
+  typeof navigator !== "undefined" && "serial" in navigator;
 
 const isInsideIframe = () => {
   try {
@@ -94,8 +67,8 @@ const state: Omit<Snapshot, "supported"> = {
 };
 
 const snapshot: Snapshot = {
-  supported: isHidSupported(),
-  status: isHidSupported() ? state.status : "unsupported",
+  supported: isSerialSupported(),
+  status: isSerialSupported() ? state.status : "unsupported",
   error: state.error,
   telemetry: state.telemetry,
 };
@@ -112,6 +85,14 @@ export const onHardwareButton = (cb: (b: HardwareButton) => void) => {
   };
 };
 
+const fireButton = (b: HardwareButton) => {
+  buttonListeners.forEach((cb) => {
+    try {
+      cb(b);
+    } catch {}
+  });
+};
+
 const setState = (patch: Partial<typeof state>) => {
   let changed = false;
   (Object.keys(patch) as Array<keyof typeof state>).forEach((key) => {
@@ -122,8 +103,8 @@ const setState = (patch: Partial<typeof state>) => {
     }
   });
   if (changed) {
-    snapshot.supported = isHidSupported();
-    snapshot.status = isHidSupported() ? state.status : "unsupported";
+    snapshot.supported = isSerialSupported();
+    snapshot.status = isSerialSupported() ? state.status : "unsupported";
     snapshot.error = state.error;
     snapshot.telemetry = state.telemetry;
     emit();
@@ -132,70 +113,156 @@ const setState = (patch: Partial<typeof state>) => {
 
 const getSnapshot = (): Snapshot => snapshot;
 
-// --- Persistent HID connection ---------------------------------------------
-let device: HIDDevice | null = null;
+// --- Persistent Web Serial connection ---------------------------------------
+type SerialPortLike = {
+  readable: ReadableStream<Uint8Array> | null;
+  writable: WritableStream<Uint8Array> | null;
+  open(opts: { baudRate: number }): Promise<void>;
+  close(): Promise<void>;
+  addEventListener?: (type: string, listener: () => void) => void;
+  removeEventListener?: (type: string, listener: () => void) => void;
+};
+type NavigatorSerial = {
+  requestPort(): Promise<SerialPortLike>;
+  getPorts(): Promise<SerialPortLike[]>;
+  addEventListener?: (type: string, listener: () => void) => void;
+};
 
-const handleDisconnect = (event: HIDConnectionEvent) => {
-  if (device && event.device === device) {
-    console.warn("HID device disconnected.");
-    void cleanup("disconnected", "PicoPD Pro disconnected.");
-  }
+let port: SerialPortLike | null = null;
+let reader: ReadableStreamDefaultReader<string> | null = null;
+let writer: WritableStreamDefaultWriter<Uint8Array> | null = null;
+let readableClosed: Promise<void> | null = null;
+let writableClosed: Promise<void> | null = null;
+let abortRead = false;
+
+const handlePortDisconnect = () => {
+  console.warn("Serial port disconnected.");
+  void cleanup("disconnected", "PicoPD Pro disconnected.");
 };
 
 async function cleanup(nextStatus: Status = "disconnected", nextError: string | null = null) {
-  if (device) {
-    try {
-      device.oninputreport = null as unknown as HIDDevice["oninputreport"];
-    } catch {}
-    try {
-      if (device.opened) await device.close();
-    } catch {}
-    device = null;
-  }
+  abortRead = true;
   try {
-    (navigator as unknown as { hid?: HID }).hid?.removeEventListener("disconnect", handleDisconnect);
+    await reader?.cancel();
   } catch {}
+  try {
+    reader?.releaseLock();
+  } catch {}
+  reader = null;
+  try {
+    await writer?.close();
+  } catch {}
+  try {
+    writer?.releaseLock();
+  } catch {}
+  writer = null;
+  try {
+    await readableClosed;
+  } catch {}
+  try {
+    await writableClosed;
+  } catch {}
+  readableClosed = null;
+  writableClosed = null;
+  if (port) {
+    try {
+      port.removeEventListener?.("disconnect", handlePortDisconnect);
+    } catch {}
+    try {
+      await port.close();
+    } catch {}
+    port = null;
+  }
   setState({ status: nextStatus, error: nextError, telemetry: null });
 }
 
-const handleInputReport = (event: HIDInputReportEvent) => {
-  const data = event.data; // DataView (Report ID byte stripped)
-  if (!data || data.byteLength < 3) return;
+const handleLine = (raw: string) => {
+  const line = raw.trim();
+  if (!line) return;
 
-  const stateId = data.getUint8(0);
-  const voltage = data.getUint8(1) / 10;
-  const current = data.getUint8(2) / 10;
-  const buttonId = data.byteLength > 3 ? data.getUint8(3) : 0;
-  const remote = data.byteLength > 4 ? data.getUint8(4) !== 0 : false;
-  const profile = data.byteLength > 5 ? data.getUint8(5) : undefined;
-
-  if (buttonId >= 1 && buttonId <= 3) {
-    const b: HardwareButton = buttonId === 1 ? "UP" : buttonId === 2 ? "DOWN" : "ENTER";
-    buttonListeners.forEach((cb) => {
-      try {
-        cb(b);
-      } catch {}
-    });
+  // Encoder rotation: CW → DOWN, CCW → UP (per user mapping)
+  if (line.startsWith("ENC:")) {
+    const dir = line.slice(4).toUpperCase();
+    if (dir === "CW") fireButton("DOWN");
+    else if (dir === "CCW") fireButton("UP");
+    return;
   }
 
-  const telemetry: Telemetry = {
-    v: voltage,
-    i: current,
-    p: +(voltage * current).toFixed(2),
-    voltage,
-    current,
-    state: STATES[stateId] ?? "UNKNOWN",
-    remote,
-    ...(profile !== undefined && profile !== 0xff ? { profile } : {}),
-  };
-  setState({ telemetry, error: null });
+  // Button: "BTN:ENTER" / "BTN:UP" / "BTN:DOWN"
+  if (line.startsWith("BTN:")) {
+    const k = line.slice(4).toUpperCase();
+    if (k === "UP" || k === "DOWN" || k === "ENTER") fireButton(k);
+    return;
+  }
+
+  // JSON: button event or telemetry
+  if (line.startsWith("{")) {
+    try {
+      const obj = JSON.parse(line);
+      if (typeof obj?.button === "string") {
+        const k = obj.button.toUpperCase();
+        if (k === "UP" || k === "DOWN" || k === "ENTER") fireButton(k as HardwareButton);
+        return;
+      }
+      // Optional telemetry frame
+      const voltage = Number(obj.voltage ?? obj.v);
+      const current = Number(obj.current ?? obj.i);
+      if (Number.isFinite(voltage) || Number.isFinite(current)) {
+        const v = Number.isFinite(voltage) ? voltage : 0;
+        const i = Number.isFinite(current) ? current : 0;
+        setState({
+          telemetry: {
+            v,
+            i,
+            p: +(v * i).toFixed(2),
+            voltage: v,
+            current: i,
+            state: typeof obj.state === "string" ? obj.state : undefined,
+            remote: obj.remote === true || obj.remote === 1,
+          },
+          error: null,
+        });
+      }
+    } catch (e) {
+      console.warn("Failed to parse JSON line:", line, e);
+    }
+    return;
+  }
 };
 
-async function connectHid() {
-  if (!isHidSupported()) {
+async function readLoop(textStream: ReadableStream<string>) {
+  reader = textStream.getReader();
+  let buffer = "";
+  try {
+    while (!abortRead) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += value;
+      let nl: number;
+      while ((nl = buffer.indexOf("\n")) >= 0) {
+        const line = buffer.slice(0, nl).replace(/\r$/, "");
+        buffer = buffer.slice(nl + 1);
+        handleLine(line);
+      }
+    }
+  } catch (err) {
+    if (!abortRead) {
+      console.error("Serial read error:", err);
+      setState({ error: err instanceof Error ? err.message : "Serial read error" });
+    }
+  } finally {
+    try {
+      reader?.releaseLock();
+    } catch {}
+    reader = null;
+  }
+}
+
+async function connectSerial() {
+  if (!isSerialSupported()) {
     setState({
       status: "unsupported",
-      error: "WebHID is not supported in this browser. Use Chrome/Edge on desktop.",
+      error: "Web Serial is not supported in this browser. Use Chrome/Edge on desktop.",
     });
     return;
   }
@@ -204,84 +271,65 @@ async function connectHid() {
     setState({
       status: "error",
       error:
-        'WebHID is blocked inside the embedded Lovable preview. Open the app in a new tab ("Open in new tab" button) or use the published URL.',
+        'Web Serial is blocked inside the embedded Lovable preview. Open the app in a new tab ("Open in new tab" button) or use the published URL.',
     });
     return;
   }
 
-  if (device) await cleanup();
+  if (port) await cleanup();
 
   try {
     setState({ status: "connecting", error: null, telemetry: null });
 
-    // Empty filters = let the user pick any HID device (PicoPD Pro).
-    const devices = await (navigator as unknown as { hid: HID }).hid.requestDevice({ filters: [] });
-    if (!devices.length) {
-      setState({ status: "disconnected", error: "No device selected." });
-      return;
-    }
+    const nav = (navigator as unknown as { serial: NavigatorSerial }).serial;
+    const picked = await nav.requestPort();
+    await picked.open({ baudRate: 115200 });
+    port = picked;
+    abortRead = false;
 
-    const picked = devices[0];
-    if (!picked.opened) await picked.open();
+    // Decode incoming bytes as UTF-8 text stream.
+    const textDecoder = new TextDecoderStream();
+    readableClosed = picked.readable!.pipeTo(textDecoder.writable as unknown as WritableStream<Uint8Array>).catch(() => {});
+    void readLoop(textDecoder.readable);
 
-    device = picked;
-    device.oninputreport = handleInputReport;
-    (navigator as unknown as { hid: HID }).hid.addEventListener("disconnect", handleDisconnect);
+    // Writer for outbound CSV commands.
+    writer = picked.writable!.getWriter();
 
-    console.log("WebHID device opened:", device.productName);
+    try {
+      picked.addEventListener?.("disconnect", handlePortDisconnect);
+    } catch {}
+
+    console.log("Serial port opened @115200");
     setState({ status: "connected", error: null });
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Failed to connect via WebHID.";
-    console.error("WebHID connection failed:", err);
+    const message = err instanceof Error ? err.message : "Failed to connect to the serial port.";
+    console.error("Serial connection failed:", err);
     await cleanup("error", message);
   }
 }
 
 async function sendHardwareCommand(payload: SerialCommand) {
-  if (!device || !device.opened) {
-    console.error("HID device unavailable. Connect first!");
+  if (!port || !writer) {
+    console.error("Serial port unavailable. Connect first!");
     setState({ error: "PicoPD Pro is not connected. Click Connect first!" });
     return;
   }
   try {
-    const report = new Uint8Array(63);
-    report.fill(0xff, 3); // unset markers
-
-    if (typeof payload.state === "string") report[0] = stateToId(payload.state);
-    else report[0] = 0;
-
-    if (typeof payload.voltage === "number") {
-      report[1] = Math.max(0, Math.min(255, Math.round(payload.voltage * 10)));
-    } else {
-      report[1] = 0;
-    }
-
-    if (typeof payload.current === "number") {
-      report[2] = Math.max(0, Math.min(255, Math.round(payload.current * 10)));
-    } else {
-      report[2] = 0;
-    }
-
-    if (typeof payload.setOutput === "number") {
-      report[3] = payload.setOutput ? 1 : 0;
-    } else if (typeof payload.output === "number" || typeof payload.output === "boolean") {
-      report[3] = payload.output ? 1 : 0;
-    }
-
-    if (typeof payload.polarity === "string") report[4] = polarityToByte(payload.polarity);
-    if (typeof payload.profile === "number") report[5] = payload.profile & 0xff;
-
-    await device.sendReport(0, report);
-    console.log("HID report sent:", Array.from(report.slice(0, 6)));
+    const stateId = stateToId(payload.state);
+    const voltage = Number(payload.voltage ?? 0);
+    const current = Number(payload.current ?? 0);
+    const line = `${stateId},${voltage.toFixed(2)},${current.toFixed(2)}\n`;
+    await writer.write(new TextEncoder().encode(line));
+    console.log("Serial sent:", line.trim());
     setState({ error: null });
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Error sending HID report.";
-    console.error("Error sending HID report:", err);
+    const message = err instanceof Error ? err.message : "Error sending over serial.";
+    console.error("Serial write failed:", err);
     setState({ error: message });
   }
 }
 
-async function disconnectHid() {
+async function disconnectSerial() {
   await cleanup();
 }
 
@@ -308,8 +356,8 @@ export function useSerialTelemetry() {
     status: snap.status,
     error: snap.error,
     telemetry: snap.telemetry,
-    connect: connectHid,
-    disconnect: disconnectHid,
+    connect: connectSerial,
+    disconnect: disconnectSerial,
     send: sendHardwareCommand,
   };
 }
