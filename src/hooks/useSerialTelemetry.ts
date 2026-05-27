@@ -345,7 +345,8 @@ async function sendHardwareCommand(payload: SerialCommand) {
     const stateId = stateToId(payload.state);
     const voltage = Number(payload.voltage ?? 0);
     const current = Number(payload.current ?? 0);
-    const line = `${stateId},${Math.round(voltage)},${current.toFixed(1)}\n`;
+    const rawName = String(payload.device ?? "").replace(/[,\r\n]/g, " ").trim().slice(0, 30);
+    const line = `${stateId},${voltage.toFixed(1)},${current.toFixed(1)},${rawName}\n`;
     await writer.write(new TextEncoder().encode(line));
     console.log("Serial sent:", line.trim());
     setState({ error: null });
