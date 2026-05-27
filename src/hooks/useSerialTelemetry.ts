@@ -6,10 +6,12 @@ import { useEffect, useSyncExternalStore } from "react";
 // Wire protocol
 // -------------
 // Host  → Pico : single CSV line per command, newline terminated:
-//                  "<stateId>,<voltageInt>,<current1dp>\n"   e.g. "3,9,3.0\n"
+//                  "<stateId>,<voltage1dp>,<current1dp>,<deviceName>\n"
+//                  e.g. "3,9.0,3.0,HX Stomp\n"
 //                stateId: 0=SELECTING, 1=FINE_TUNING, 2=POLARITY_CHECK, 3=LOCKED
-//                voltage : integer volts (rounded)
+//                voltage : volts, 1 decimal place (PPS-friendly)
 //                current : amps, 1 decimal place
+//                device  : sanitized name (no commas/newlines, max 30 chars)
 //
 // Pico → Host : newline-delimited lines, any of:
 //                  "ENC:CW"       → encoder rotated clockwise  → DOWN
