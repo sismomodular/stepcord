@@ -6,10 +6,12 @@ import { useEffect, useSyncExternalStore } from "react";
 // Wire protocol
 // -------------
 // Host  → Pico : single CSV line per command, newline terminated:
-//                  "<stateId>,<voltageInt>,<current1dp>\n"   e.g. "3,9,3.0\n"
+//                  "<stateId>,<voltage1dp>,<current1dp>,<deviceName>\n"
+//                  e.g. "3,9.0,3.0,HX Stomp\n"
 //                stateId: 0=SELECTING, 1=FINE_TUNING, 2=POLARITY_CHECK, 3=LOCKED
-//                voltage : integer volts (rounded)
+//                voltage : volts, 1 decimal place (PPS-friendly)
 //                current : amps, 1 decimal place
+//                device  : sanitized name (no commas/newlines, max 30 chars)
 //
 // Pico → Host : newline-delimited lines, any of:
 //                  "ENC:CW"       → encoder rotated clockwise  → DOWN
@@ -343,7 +345,8 @@ async function sendHardwareCommand(payload: SerialCommand) {
     const stateId = stateToId(payload.state);
     const voltage = Number(payload.voltage ?? 0);
     const current = Number(payload.current ?? 0);
-    const line = `${stateId},${Math.round(voltage)},${current.toFixed(1)}\n`;
+    const rawName = String(payload.device ?? "").replace(/[,\r\n]/g, " ").trim().slice(0, 30);
+    const line = `${stateId},${voltage.toFixed(1)},${current.toFixed(1)},${rawName}\n`;
     await writer.write(new TextEncoder().encode(line));
     console.log("Serial sent:", line.trim());
     setState({ error: null });
