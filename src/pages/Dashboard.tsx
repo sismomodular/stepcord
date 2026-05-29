@@ -383,6 +383,45 @@ const Dashboard = () => {
             })}
           </div>
         </section>
+
+        {/* Últimos 5 Perfis Utilizados (EEPROM) */}
+        <section className="panel p-5 md:p-6">
+          <h3 className="text-sm font-bold uppercase tracking-wider text-muted-foreground mb-3">
+            Últimos 5 Perfis Utilizados (EEPROM)
+          </h3>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-5">
+            {historyProfiles.length === 0 ? (
+              <p className="text-xs text-muted-foreground italic col-span-full">
+                Nenhum perfil carregado ou dispositivo desligado.
+              </p>
+            ) : (
+              historyProfiles.map((profile, slot) => (
+                <button
+                  key={`${profile.name}-${profile.voltage}`}
+                  disabled={!connected || isLocked}
+                  onClick={() => {
+                    const idx = DEVICES.findIndex(
+                      (d) => d.name === profile.name && d.voltage === profile.voltage,
+                    );
+                    if (idx >= 0) pickProfile(idx);
+                  }}
+                  className="flex justify-between items-center p-2.5 rounded-lg border border-border bg-card hover:border-primary/60 hover:bg-primary/10 transition-colors text-left disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <div className="truncate pr-2">
+                    <span className="text-[10px] font-bold block uppercase tracking-wider text-muted-foreground">
+                      Slot {slot + 1}
+                    </span>
+                    <span className="text-sm font-semibold truncate block">{profile.name}</span>
+                  </div>
+                  <div className="text-right whitespace-nowrap font-mono-tech">
+                    <span className="text-sm font-bold text-primary">{profile.voltage.toFixed(1)}V</span>
+                    <span className="text-xs text-muted-foreground ml-2">{profile.current.toFixed(1)}A</span>
+                  </div>
+                </button>
+              ))
+            )}
+          </div>
+        </section>
       </div>
     </div>
   );
