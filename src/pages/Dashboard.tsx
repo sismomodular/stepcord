@@ -20,6 +20,27 @@ const Dashboard = () => {
   const [manualV, setManualV] = useState<number>(5.0);
   const [armed, setArmed] = useState<boolean>(false);
 
+  type HistoryProfile = { id: number; name: string; voltage: number; current: number };
+  const HISTORY_KEY = "stepcord:history:v1";
+  const [historyProfiles, setHistoryProfiles] = useState<HistoryProfile[]>(() => {
+    try {
+      const raw = typeof localStorage !== "undefined" ? localStorage.getItem(HISTORY_KEY) : null;
+      const parsed = raw ? JSON.parse(raw) : [];
+      return Array.isArray(parsed) ? parsed.slice(0, 5) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const pushHistory = useCallback((p: HistoryProfile) => {
+    setHistoryProfiles((prev) => {
+      const filtered = prev.filter((x) => !(x.name === p.name && x.voltage === p.voltage));
+      const next = [p, ...filtered].slice(0, 5);
+      try { localStorage.setItem(HISTORY_KEY, JSON.stringify(next)); } catch {}
+      return next;
+    });
+  }, []);
+
   useEffect(() => {
     const html = document.documentElement;
     const had = html.classList.contains("dark");
