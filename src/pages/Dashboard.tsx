@@ -95,7 +95,11 @@ const Dashboard = () => {
     setSelectedIdx(idx);
     const nextState: DeviceState = idx === MANUAL_IDX ? "FINE_TUNING" : "SELECTING";
     sendSync(nextState, idx);
-  }, [isLocked, sendSync]);
+    if (idx !== MANUAL_IDX) {
+      const d = DEVICES[idx];
+      pushHistory({ id: idx, name: d.name, voltage: d.voltage, current: d.current });
+    }
+  }, [isLocked, sendSync, pushHistory]);
 
   const onManualVoltChange = useCallback((v: number) => {
     const clamped = Math.min(MANUAL_MAX_V, Math.max(MANUAL_MIN_V, Math.round(v * 10) / 10));
