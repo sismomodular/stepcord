@@ -19,8 +19,16 @@ export const DEVICES: MusicalDevice[] = [
   { name: "Microcosm",              brand: "Hologram",          voltage:  9.0, current: 0.5, defaultPolarity: "center-negative", polarityLabel: "USE INVERTER C-" },
   { name: "MKI / Digitone",         brand: "Elektron (Legacy)", voltage: 12.0, current: 2.0, defaultPolarity: "center-positive", polarityLabel: "KEEP CENTER + " },
   { name: "ZOIA",                   brand: "Empress Effects",   voltage:  9.0, current: 0.3, defaultPolarity: "center-negative", polarityLabel: "USE INVERTER C-" },
+  { name: "Anagram",                brand: "Darkglass",         voltage:  9.0, current: 1.0, defaultPolarity: "center-negative", polarityLabel: "USE INVERTER C-" },
   { name: "JD-Xi Synth",            brand: "Roland",            voltage:  5.7, current: 2.0, defaultPolarity: "center-positive", polarityLabel: "KEEP CENTER + " },
   { name: "Volca Series",           brand: "Korg",              voltage:  9.0, current: 1.7, defaultPolarity: "center-positive", polarityLabel: "KEEP CENTER + " },
+  { name: "MicroFreak",             brand: "Arturia",           voltage:  9.0, current: 1.0, defaultPolarity: "center-negative", polarityLabel: "USE INVERTER C-" },
+  { name: "MiniFreak",              brand: "Arturia",           voltage: 12.0, current: 2.5, defaultPolarity: "center-negative", polarityLabel: "USE INVERTER C-" },
+  { name: "AstroLab",               brand: "Arturia",           voltage: 15.0, current: 3.0, defaultPolarity: "center-positive", polarityLabel: "KEEP CENTER + " },
+  { name: "MicroKorg",              brand: "Korg",              voltage:  9.0, current: 0.3, defaultPolarity: "center-negative", polarityLabel: "USE INVERTER C-" },
+  { name: "Minilogue XD",           brand: "Korg",              voltage:  9.0, current: 1.7, defaultPolarity: "center-positive", polarityLabel: "KEEP CENTER + " },
+  { name: "Wavestate",              brand: "Korg",              voltage:  9.0, current: 1.7, defaultPolarity: "center-positive", polarityLabel: "KEEP CENTER + " },
+  { name: "OP-1 Field",             brand: "Teenage Engineering", voltage: 5.0, current: 1.5, defaultPolarity: "center-positive", polarityLabel: "KEEP CENTER + " },
   { name: "[ MANUAL MODE ]",        brand: "Custom",            voltage:  5.0, current: 3.0, defaultPolarity: "center-positive", polarityLabel: "CHECK PLUG TYPE" },
 ];
 
