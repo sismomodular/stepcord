@@ -20,6 +20,27 @@ const Dashboard = () => {
   const [manualV, setManualV] = useState<number>(5.0);
   const [armed, setArmed] = useState<boolean>(false);
 
+  type HistoryProfile = { id: number; name: string; voltage: number; current: number };
+  const HISTORY_KEY = "stepcord:history:v1";
+  const [historyProfiles, setHistoryProfiles] = useState<HistoryProfile[]>(() => {
+    try {
+      const raw = typeof localStorage !== "undefined" ? localStorage.getItem(HISTORY_KEY) : null;
+      const parsed = raw ? JSON.parse(raw) : [];
+      return Array.isArray(parsed) ? parsed.slice(0, 5) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const pushHistory = useCallback((p: HistoryProfile) => {
+    setHistoryProfiles((prev) => {
+      const filtered = prev.filter((x) => !(x.name === p.name && x.voltage === p.voltage));
+      const next = [p, ...filtered].slice(0, 5);
+      try { localStorage.setItem(HISTORY_KEY, JSON.stringify(next)); } catch {}
+      return next;
+    });
+  }, []);
+
   useEffect(() => {
     const html = document.documentElement;
     const had = html.classList.contains("dark");
@@ -74,7 +95,11 @@ const Dashboard = () => {
     setSelectedIdx(idx);
     const nextState: DeviceState = idx === MANUAL_IDX ? "FINE_TUNING" : "SELECTING";
     sendSync(nextState, idx);
-  }, [isLocked, sendSync]);
+    if (idx !== MANUAL_IDX) {
+      const d = DEVICES[idx];
+      pushHistory({ id: idx, name: d.name, voltage: d.voltage, current: d.current });
+    }
+  }, [isLocked, sendSync, pushHistory]);
 
   const onManualVoltChange = useCallback((v: number) => {
     const clamped = Math.min(MANUAL_MAX_V, Math.max(MANUAL_MIN_V, Math.round(v * 10) / 10));
@@ -356,6 +381,45 @@ const Dashboard = () => {
                 </button>
               );
             })}
+          </div>
+        </section>
+
+        {/* Últimos 5 Perfis Utilizados (EEPROM) */}
+        <section className="panel p-5 md:p-6">
+          <h3 className="text-sm font-bold uppercase tracking-wider text-muted-foreground mb-3">
+            Últimos 5 Perfis Utilizados (EEPROM)
+          </h3>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-5">
+            {historyProfiles.length === 0 ? (
+              <p className="text-xs text-muted-foreground italic col-span-full">
+                Nenhum perfil carregado ou dispositivo desligado.
+              </p>
+            ) : (
+              historyProfiles.map((profile, slot) => (
+                <button
+                  key={`${profile.name}-${profile.voltage}`}
+                  disabled={!connected || isLocked}
+                  onClick={() => {
+                    const idx = DEVICES.findIndex(
+                      (d) => d.name === profile.name && d.voltage === profile.voltage,
+                    );
+                    if (idx >= 0) pickProfile(idx);
+                  }}
+                  className="flex justify-between items-center p-2.5 rounded-lg border border-border bg-card hover:border-primary/60 hover:bg-primary/10 transition-colors text-left disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <div className="truncate pr-2">
+                    <span className="text-[10px] font-bold block uppercase tracking-wider text-muted-foreground">
+                      Slot {slot + 1}
+                    </span>
+                    <span className="text-sm font-semibold truncate block">{profile.name}</span>
+                  </div>
+                  <div className="text-right whitespace-nowrap font-mono-tech">
+                    <span className="text-sm font-bold text-primary">{profile.voltage.toFixed(1)}V</span>
+                    <span className="text-xs text-muted-foreground ml-2">{profile.current.toFixed(1)}A</span>
+                  </div>
+                </button>
+              ))
+            )}
           </div>
         </section>
       </div>
