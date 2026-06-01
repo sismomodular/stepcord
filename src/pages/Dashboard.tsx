@@ -363,7 +363,7 @@ const Dashboard = () => {
             <div className="mb-4 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <SlidersHorizontal className="h-4 w-4 text-primary" />
-                <h2 className="text-sm font-bold uppercase tracking-wider">Manual PPS Voltage</h2>
+                <h2 className="text-sm font-bold uppercase tracking-wider">PPS Voltage</h2>
               </div>
               <div className="readout px-4 py-2 font-mono-tech text-2xl font-bold text-primary">
                 {manualV.toFixed(1)} V
