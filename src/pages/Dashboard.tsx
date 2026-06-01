@@ -137,26 +137,6 @@ const Dashboard = () => {
     if (connected && selectedIdx != null) sendSync();
   }, [connected]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Mirror hardware telemetry → UI (encoder/button on the device updates app).
-  useEffect(() => {
-    if (!telemetry) return;
-    const hwName = telemetry.device;
-    if (hwName) {
-      const idx = DEVICES.findIndex(
-        (d) => d.name.toLowerCase() === hwName.toLowerCase() ||
-               hwName.toLowerCase().includes(d.name.toLowerCase()),
-      );
-      const targetIdx = idx >= 0 ? idx : (telemetry.mode === "PPS" ? MANUAL_IDX : null);
-      if (targetIdx != null && targetIdx !== selectedIdx) setSelectedIdx(targetIdx);
-      if (targetIdx === MANUAL_IDX && Number.isFinite(telemetry.v)) {
-        const vClamped = Math.min(MANUAL_MAX_V, Math.max(MANUAL_MIN_V, telemetry.v));
-        if (Math.abs(vClamped - manualV) > 0.05) setManualV(vClamped);
-      }
-    }
-    const hwArmed = telemetry.output === 1 || telemetry.output === true;
-    if (hwArmed !== armed) setArmed(hwArmed);
-  }, [telemetry]); // eslint-disable-line react-hooks/exhaustive-deps
-
   const deviceName = selectedIdx != null ? DEVICES[selectedIdx].name : "—";
   const voltage = isManual ? manualV : selectedIdx != null ? DEVICES[selectedIdx].voltage : 0;
   const current = selectedIdx != null ? DEVICES[selectedIdx].current : 0;
