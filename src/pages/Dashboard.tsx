@@ -65,6 +65,14 @@ const Dashboard = () => {
   const isFineTuning = deviceState === "FINE_TUNING";
   const isSelecting = deviceState === "SELECTING";
 
+  // Local (non-web) profile names recognized by firmware. When the outgoing
+  // device name matches one of these, isWebMode = false. Any other name is
+  // assumed to be a user-defined web profile (isWebMode = true).
+  const LOCAL_PROFILE_NAMES = ["PPS CONTROL", "PPS VOLTAGE"] as const;
+  const WEB_FALLBACK_NAME = "Web Profile";
+  const isWebProfileName = (name: string) =>
+    !!name && !LOCAL_PROFILE_NAMES.includes(name.toUpperCase() as typeof LOCAL_PROFILE_NAMES[number]);
+
   // Build the unified payload from local state.
   const buildPayload = useCallback((stateOverride?: DeviceState, idxOverride?: number | null, vOverride?: number) => {
     const idx = idxOverride ?? selectedIdx;
@@ -74,15 +82,21 @@ const Dashboard = () => {
     const volt = manual ? (vOverride ?? manualV) : d.voltage;
     const state = stateOverride ?? deviceState;
     const protocol = manual || state === "FINE_TUNING" ? "[PPS]" : "[PD]";
+    // Local PPS modes report a fixed system name so the firmware can flag isWebMode=false.
+    const rawName = manual
+      ? (state === "FINE_TUNING" ? "PPS VOLTAGE" : "PPS CONTROL")
+      : String(d.name);
     return {
-      device: String(d.name).slice(0, 16),
+      device: rawName.slice(0, 16),
       voltage: Number(volt.toFixed(2)),
       current: Number(d.current.toFixed(2)),
       polarity: d.polarityLabel,
       protocol,
       state,
+      isWebMode: isWebProfileName(rawName),
     };
   }, [selectedIdx, manualV, deviceState]);
+
 
   const sendSync = useCallback((stateOverride?: DeviceState, idxOverride?: number | null, vOverride?: number) => {
     if (!connected) return;
@@ -137,9 +151,12 @@ const Dashboard = () => {
     if (connected && selectedIdx != null) sendSync();
   }, [connected]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const deviceName = selectedIdx != null ? DEVICES[selectedIdx].name : "—";
+  const deviceName = selectedIdx != null
+    ? (isManual ? (isFineTuning ? "PPS VOLTAGE" : "PPS CONTROL") : DEVICES[selectedIdx].name)
+    : "—";
   const voltage = isManual ? manualV : selectedIdx != null ? DEVICES[selectedIdx].voltage : 0;
   const current = selectedIdx != null ? DEVICES[selectedIdx].current : 0;
+  const power = Number((voltage * current).toFixed(2));
   const polarity = selectedIdx != null ? DEVICES[selectedIdx].polarityLabel : "—";
   const remote = telemetry?.remote ?? false;
 
@@ -147,10 +164,11 @@ const Dashboard = () => {
 
   const headerStatus = useMemo(() => {
     if (deviceState === "LOCKED") return { text: "POWER OUTPUT: ACTIVE", tone: "locked" as const };
-    if (deviceState === "FINE_TUNING") return { text: "MODE: MANUAL SETUP", tone: "tuning" as const };
+    if (deviceState === "FINE_TUNING") return { text: "[ PPS CONTROL ]", tone: "tuning" as const };
     if (deviceState === "SELECTING") return { text: "MODE: PROFILE SELECT", tone: "select" as const };
     return { text: "DISCONNECTED", tone: "off" as const };
   }, [deviceState]);
+
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -261,13 +279,51 @@ const Dashboard = () => {
           )}
         </section>
 
-        {/* Telemetry */}
-        <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <StatCard label="Device" value={deviceName} mono={false} />
-          <StatCard label="Voltage" value={`${Number(voltage).toFixed(2)} V`} accent />
-          <StatCard label="Current" value={`${Number(current).toFixed(2)} A`} accent />
-          <StatCard label="Polarity" value={polarity} small />
+        {/* Telemetry — device name is the primary anchor; voltage/current/power are secondary readouts */}
+        <section className="panel p-5 md:p-6">
+          <div className="flex flex-col gap-1">
+            <div className="text-[10px] font-bold uppercase tracking-[0.22em] text-muted-foreground">
+              Active Device
+            </div>
+            <div
+              className="truncate text-3xl font-extrabold leading-tight tracking-tight text-foreground sm:text-4xl md:text-5xl"
+              title={deviceName}
+            >
+              {deviceName}
+            </div>
+            <div className="mt-1 flex flex-wrap items-baseline gap-x-3 gap-y-1 font-mono-tech text-primary">
+              <span className="text-xl font-bold sm:text-2xl">{Number(voltage).toFixed(2)} V</span>
+              <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                {polarity}
+              </span>
+            </div>
+          </div>
+
+          <div className="mt-5 grid grid-cols-3 gap-3">
+            <MiniStat label="Current" value={`${Number(current).toFixed(2)} A`} accent />
+            <MiniStat label="Power" value={`${power.toFixed(2)} W`} accent />
+            <div className="rounded-lg border border-border bg-card/60 p-3">
+              <div className="text-[10px] font-bold uppercase tracking-[0.22em] text-muted-foreground">
+                Status
+              </div>
+              <div className="mt-1 flex items-center gap-1.5">
+                <span
+                  className={`h-2 w-2 rounded-full ${
+                    isLocked ? "bg-destructive animate-pulse-dot" : profileConfirmed ? "bg-warning" : "bg-muted-foreground"
+                  }`}
+                />
+                <span
+                  className={`truncate font-mono-tech text-sm font-bold tracking-wider ${
+                    isLocked ? "text-destructive" : profileConfirmed ? "text-warning" : "text-muted-foreground"
+                  }`}
+                >
+                  {isLocked ? "LIVE" : profileConfirmed ? "ARMED" : "IDLE"}
+                </span>
+              </div>
+            </div>
+          </div>
         </section>
+
 
         {/* Big power action */}
         <section className="panel p-5 md:p-6">
@@ -307,7 +363,7 @@ const Dashboard = () => {
             <div className="mb-4 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <SlidersHorizontal className="h-4 w-4 text-primary" />
-                <h2 className="text-sm font-bold uppercase tracking-wider">Manual PPS Voltage</h2>
+                <h2 className="text-sm font-bold uppercase tracking-wider">PPS Voltage</h2>
               </div>
               <div className="readout px-4 py-2 font-mono-tech text-2xl font-bold text-primary">
                 {manualV.toFixed(1)} V
@@ -367,7 +423,7 @@ const Dashboard = () => {
                 >
                   <div className="min-w-0">
                     <div className="truncate text-sm font-bold">
-                      {manualEntry ? "[ MANUAL MODE ]" : d.name}
+                      {manualEntry ? "[ PPS CONTROL ]" : d.name}
                     </div>
                     <div className="mt-0.5 truncate text-xs text-muted-foreground">
                       {d.brand} · <span className="font-mono-tech">{d.voltage.toFixed(1)} V · {d.current.toFixed(2)} A</span>
@@ -442,5 +498,22 @@ const StatCard = ({
     </div>
   </div>
 );
+
+const MiniStat = ({
+  label, value, accent,
+}: { label: string; value: string; accent?: boolean }) => (
+  <div className="rounded-lg border border-border bg-card/60 p-3">
+    <div className="text-[10px] font-bold uppercase tracking-[0.22em] text-muted-foreground">{label}</div>
+    <div
+      className={`mt-1 truncate font-mono-tech text-base font-extrabold sm:text-lg ${
+        accent ? "text-primary" : "text-foreground"
+      }`}
+      title={value}
+    >
+      {value}
+    </div>
+  </div>
+);
+
 
 export default Dashboard;
