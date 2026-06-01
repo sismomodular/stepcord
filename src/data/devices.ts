@@ -28,7 +28,7 @@ export const DEVICES: MusicalDevice[] = [
   { name: "MicroKorg",              brand: "Korg",              voltage:  9.0, current: 0.3, defaultPolarity: "center-negative", polarityLabel: "USE INVERTER C-" },
   { name: "Minilogue XD",           brand: "Korg",              voltage:  9.0, current: 1.7, defaultPolarity: "center-positive", polarityLabel: "KEEP CENTER + " },
   { name: "Wavestate",              brand: "Korg",              voltage:  9.0, current: 1.7, defaultPolarity: "center-positive", polarityLabel: "KEEP CENTER + " },
-  { name: "[ PPS CONTROL ]",        brand: "Custom",            voltage:  5.0, current: 3.0, defaultPolarity: "center-positive", polarityLabel: "CHECK PLUG TYPE" },
+  { name: "[ MANUAL MODE ]",        brand: "Custom",            voltage:  5.0, current: 3.0, defaultPolarity: "center-positive", polarityLabel: "CHECK PLUG TYPE" },
 ];
 
 // Index of the manual mode entry in DEVICES (last item).
