@@ -279,12 +279,36 @@ const Dashboard = () => {
         </section>
 
         {/* Telemetry */}
-        <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <StatCard label="Device" value={deviceName} mono={false} />
-          <StatCard label="Voltage" value={`${Number(voltage).toFixed(2)} V`} accent />
-          <StatCard label="Current" value={`${Number(current).toFixed(2)} A`} accent />
-          <StatCard label="Polarity" value={polarity} small />
+        <section className="grid gap-4 lg:grid-cols-3">
+          <div className="panel p-5 lg:col-span-2">
+            <div className="flex items-center justify-between gap-3">
+              <div className="text-[10px] font-bold uppercase tracking-[0.22em] text-muted-foreground">
+                Active Device
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => returnToLocal(isManual ? "PPS VOLTAGE" : "PPS CONTROL")}
+                disabled={!connected || isLocked || selectedIdx === null}
+                className="h-7 rounded-full text-[10px] font-bold uppercase tracking-wider"
+              >
+                Return to Local
+              </Button>
+            </div>
+            <div
+              className="mt-2 truncate text-4xl font-extrabold text-foreground md:text-5xl lg:text-6xl"
+              title={deviceName}
+            >
+              {deviceName}
+            </div>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-3 lg:grid-cols-1">
+            <StatCard label="Voltage" value={`${Number(voltage).toFixed(2)} V`} accent small />
+            <StatCard label="Current" value={`${Number(current).toFixed(2)} A`} accent small />
+            <StatCard label="Polarity" value={polarity} small />
+          </div>
         </section>
+
 
         {/* Big power action */}
         <section className="panel p-5 md:p-6">
