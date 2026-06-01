@@ -279,13 +279,51 @@ const Dashboard = () => {
           )}
         </section>
 
-        {/* Telemetry */}
-        <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <StatCard label="Device" value={deviceName} mono={false} />
-          <StatCard label="Voltage" value={`${Number(voltage).toFixed(2)} V`} accent />
-          <StatCard label="Current" value={`${Number(current).toFixed(2)} A`} accent />
-          <StatCard label="Polarity" value={polarity} small />
+        {/* Telemetry — device name is the primary anchor; voltage/current/power are secondary readouts */}
+        <section className="panel p-5 md:p-6">
+          <div className="flex flex-col gap-1">
+            <div className="text-[10px] font-bold uppercase tracking-[0.22em] text-muted-foreground">
+              Active Device
+            </div>
+            <div
+              className="truncate text-3xl font-extrabold leading-tight tracking-tight text-foreground sm:text-4xl md:text-5xl"
+              title={deviceName}
+            >
+              {deviceName}
+            </div>
+            <div className="mt-1 flex flex-wrap items-baseline gap-x-3 gap-y-1 font-mono-tech text-primary">
+              <span className="text-xl font-bold sm:text-2xl">{Number(voltage).toFixed(2)} V</span>
+              <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                {polarity}
+              </span>
+            </div>
+          </div>
+
+          <div className="mt-5 grid grid-cols-3 gap-3">
+            <MiniStat label="Current" value={`${Number(current).toFixed(2)} A`} accent />
+            <MiniStat label="Power" value={`${power.toFixed(2)} W`} accent />
+            <div className="rounded-lg border border-border bg-card/60 p-3">
+              <div className="text-[10px] font-bold uppercase tracking-[0.22em] text-muted-foreground">
+                Status
+              </div>
+              <div className="mt-1 flex items-center gap-1.5">
+                <span
+                  className={`h-2 w-2 rounded-full ${
+                    isLocked ? "bg-destructive animate-pulse-dot" : profileConfirmed ? "bg-warning" : "bg-muted-foreground"
+                  }`}
+                />
+                <span
+                  className={`truncate font-mono-tech text-sm font-bold tracking-wider ${
+                    isLocked ? "text-destructive" : profileConfirmed ? "text-warning" : "text-muted-foreground"
+                  }`}
+                >
+                  {isLocked ? "LIVE" : profileConfirmed ? "ARMED" : "IDLE"}
+                </span>
+              </div>
+            </div>
+          </div>
         </section>
+
 
         {/* Big power action */}
         <section className="panel p-5 md:p-6">
