@@ -499,4 +499,21 @@ const StatCard = ({
   </div>
 );
 
+const MiniStat = ({
+  label, value, accent,
+}: { label: string; value: string; accent?: boolean }) => (
+  <div className="rounded-lg border border-border bg-card/60 p-3">
+    <div className="text-[10px] font-bold uppercase tracking-[0.22em] text-muted-foreground">{label}</div>
+    <div
+      className={`mt-1 truncate font-mono-tech text-base font-extrabold sm:text-lg ${
+        accent ? "text-primary" : "text-foreground"
+      }`}
+      title={value}
+    >
+      {value}
+    </div>
+  </div>
+);
+
+
 export default Dashboard;
