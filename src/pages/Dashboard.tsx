@@ -20,27 +20,6 @@ const Dashboard = () => {
   const [manualV, setManualV] = useState<number>(5.0);
   const [armed, setArmed] = useState<boolean>(false);
 
-  type HistoryProfile = { id: number; name: string; voltage: number; current: number };
-  const HISTORY_KEY = "stepcord:history:v1";
-  const [historyProfiles, setHistoryProfiles] = useState<HistoryProfile[]>(() => {
-    try {
-      const raw = typeof localStorage !== "undefined" ? localStorage.getItem(HISTORY_KEY) : null;
-      const parsed = raw ? JSON.parse(raw) : [];
-      return Array.isArray(parsed) ? parsed.slice(0, 5) : [];
-    } catch {
-      return [];
-    }
-  });
-
-  const pushHistory = useCallback((p: HistoryProfile) => {
-    setHistoryProfiles((prev) => {
-      const filtered = prev.filter((x) => !(x.name === p.name && x.voltage === p.voltage));
-      const next = [p, ...filtered].slice(0, 5);
-      try { localStorage.setItem(HISTORY_KEY, JSON.stringify(next)); } catch {}
-      return next;
-    });
-  }, []);
-
   useEffect(() => {
     const html = document.documentElement;
     const had = html.classList.contains("dark");
@@ -73,9 +52,9 @@ const Dashboard = () => {
     const manual = idx === MANUAL_IDX;
     const volt = manual ? (vOverride ?? manualV) : d.voltage;
     const state = stateOverride ?? deviceState;
-    const protocol = manual || state === "FINE_TUNING" ? "PPS VOLTAGE" : "PPS CONTROL";
+    const protocol = manual || state === "FINE_TUNING" ? "[PPS]" : "[PD]";
     return {
-      device: String(d.name),
+      device: String(d.name).slice(0, 16),
       voltage: Number(volt.toFixed(2)),
       current: Number(d.current.toFixed(2)),
       polarity: d.polarityLabel,
@@ -83,23 +62,6 @@ const Dashboard = () => {
       state,
     };
   }, [selectedIdx, manualV, deviceState]);
-
-  // Send a "return to local mode" frame: clears the active web profile and
-  // tells the hardware to display its own PPS CONTROL / PPS VOLTAGE label.
-  const returnToLocal = useCallback((mode: "PPS CONTROL" | "PPS VOLTAGE" = "PPS CONTROL") => {
-    if (isLocked) return;
-    setSelectedIdx(null);
-    setArmed(false);
-    if (!connected) return;
-    void send({
-      device: mode,
-      voltage: 0,
-      current: 0,
-      polarity: "",
-      protocol: mode,
-      state: "SELECTING",
-    });
-  }, [connected, isLocked, send]);
 
   const sendSync = useCallback((stateOverride?: DeviceState, idxOverride?: number | null, vOverride?: number) => {
     if (!connected) return;
@@ -112,11 +74,7 @@ const Dashboard = () => {
     setSelectedIdx(idx);
     const nextState: DeviceState = idx === MANUAL_IDX ? "FINE_TUNING" : "SELECTING";
     sendSync(nextState, idx);
-    if (idx !== MANUAL_IDX) {
-      const d = DEVICES[idx];
-      pushHistory({ id: idx, name: d.name, voltage: d.voltage, current: d.current });
-    }
-  }, [isLocked, sendSync, pushHistory]);
+  }, [isLocked, sendSync]);
 
   const onManualVoltChange = useCallback((v: number) => {
     const clamped = Math.min(MANUAL_MAX_V, Math.max(MANUAL_MIN_V, Math.round(v * 10) / 10));
@@ -160,7 +118,7 @@ const Dashboard = () => {
   const polarity = selectedIdx != null ? DEVICES[selectedIdx].polarityLabel : "—";
   const remote = telemetry?.remote ?? false;
 
-  const protocolBadge = useMemo(() => (isFineTuning || isManual ? "PPS VOLTAGE" : "PPS CONTROL"), [isFineTuning, isManual]);
+  const protocolBadge = useMemo(() => (isFineTuning || isManual ? "[PPS]" : "[PD]"), [isFineTuning, isManual]);
 
   const headerStatus = useMemo(() => {
     if (deviceState === "LOCKED") return { text: "POWER OUTPUT: ACTIVE", tone: "locked" as const };
@@ -279,36 +237,12 @@ const Dashboard = () => {
         </section>
 
         {/* Telemetry */}
-        <section className="grid gap-4 lg:grid-cols-3">
-          <div className="panel p-5 lg:col-span-2">
-            <div className="flex items-center justify-between gap-3">
-              <div className="text-[10px] font-bold uppercase tracking-[0.22em] text-muted-foreground">
-                Active Device
-              </div>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => returnToLocal(isManual ? "PPS VOLTAGE" : "PPS CONTROL")}
-                disabled={!connected || isLocked || selectedIdx === null}
-                className="h-7 rounded-full text-[10px] font-bold uppercase tracking-wider"
-              >
-                Return to Local
-              </Button>
-            </div>
-            <div
-              className="mt-2 truncate text-4xl font-extrabold text-foreground md:text-5xl lg:text-6xl"
-              title={deviceName}
-            >
-              {deviceName}
-            </div>
-          </div>
-          <div className="grid gap-4 sm:grid-cols-3 lg:grid-cols-1">
-            <StatCard label="Voltage" value={`${Number(voltage).toFixed(2)} V`} accent small />
-            <StatCard label="Current" value={`${Number(current).toFixed(2)} A`} accent small />
-            <StatCard label="Polarity" value={polarity} small />
-          </div>
+        <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <StatCard label="Device" value={deviceName} mono={false} />
+          <StatCard label="Voltage" value={`${Number(voltage).toFixed(2)} V`} accent />
+          <StatCard label="Current" value={`${Number(current).toFixed(2)} A`} accent />
+          <StatCard label="Polarity" value={polarity} small />
         </section>
-
 
         {/* Big power action */}
         <section className="panel p-5 md:p-6">
@@ -422,45 +356,6 @@ const Dashboard = () => {
                 </button>
               );
             })}
-          </div>
-        </section>
-
-        {/* Últimos 5 Perfis Utilizados (EEPROM) */}
-        <section className="panel p-5 md:p-6">
-          <h3 className="text-sm font-bold uppercase tracking-wider text-muted-foreground mb-3">
-            Últimos 5 Perfis Utilizados (EEPROM)
-          </h3>
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-5">
-            {historyProfiles.length === 0 ? (
-              <p className="text-xs text-muted-foreground italic col-span-full">
-                Nenhum perfil carregado ou dispositivo desligado.
-              </p>
-            ) : (
-              historyProfiles.map((profile, slot) => (
-                <button
-                  key={`${profile.name}-${profile.voltage}`}
-                  disabled={!connected || isLocked}
-                  onClick={() => {
-                    const idx = DEVICES.findIndex(
-                      (d) => d.name === profile.name && d.voltage === profile.voltage,
-                    );
-                    if (idx >= 0) pickProfile(idx);
-                  }}
-                  className="flex justify-between items-center p-2.5 rounded-lg border border-border bg-card hover:border-primary/60 hover:bg-primary/10 transition-colors text-left disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <div className="truncate pr-2">
-                    <span className="text-[10px] font-bold block uppercase tracking-wider text-muted-foreground">
-                      Slot {slot + 1}
-                    </span>
-                    <span className="text-sm font-semibold truncate block">{profile.name}</span>
-                  </div>
-                  <div className="text-right whitespace-nowrap font-mono-tech">
-                    <span className="text-sm font-bold text-primary">{profile.voltage.toFixed(1)}V</span>
-                    <span className="text-xs text-muted-foreground ml-2">{profile.current.toFixed(1)}A</span>
-                  </div>
-                </button>
-              ))
-            )}
           </div>
         </section>
       </div>
