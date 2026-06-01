@@ -160,7 +160,7 @@ const Dashboard = () => {
   const polarity = selectedIdx != null ? DEVICES[selectedIdx].polarityLabel : "—";
   const remote = telemetry?.remote ?? false;
 
-  const protocolBadge = useMemo(() => (isFineTuning || isManual ? "[PPS]" : "[PD]"), [isFineTuning, isManual]);
+  const protocolBadge = useMemo(() => (isFineTuning || isManual ? "PPS VOLTAGE" : "PPS CONTROL"), [isFineTuning, isManual]);
 
   const headerStatus = useMemo(() => {
     if (deviceState === "LOCKED") return { text: "POWER OUTPUT: ACTIVE", tone: "locked" as const };
