@@ -73,9 +73,9 @@ const Dashboard = () => {
     const manual = idx === MANUAL_IDX;
     const volt = manual ? (vOverride ?? manualV) : d.voltage;
     const state = stateOverride ?? deviceState;
-    const protocol = manual || state === "FINE_TUNING" ? "[PPS]" : "[PD]";
+    const protocol = manual || state === "FINE_TUNING" ? "PPS VOLTAGE" : "PPS CONTROL";
     return {
-      device: String(d.name).slice(0, 16),
+      device: String(d.name),
       voltage: Number(volt.toFixed(2)),
       current: Number(d.current.toFixed(2)),
       polarity: d.polarityLabel,
@@ -83,6 +83,23 @@ const Dashboard = () => {
       state,
     };
   }, [selectedIdx, manualV, deviceState]);
+
+  // Send a "return to local mode" frame: clears the active web profile and
+  // tells the hardware to display its own PPS CONTROL / PPS VOLTAGE label.
+  const returnToLocal = useCallback((mode: "PPS CONTROL" | "PPS VOLTAGE" = "PPS CONTROL") => {
+    if (isLocked) return;
+    setSelectedIdx(null);
+    setArmed(false);
+    if (!connected) return;
+    void send({
+      device: mode,
+      voltage: 0,
+      current: 0,
+      polarity: "",
+      protocol: mode,
+      state: "SELECTING",
+    });
+  }, [connected, isLocked, send]);
 
   const sendSync = useCallback((stateOverride?: DeviceState, idxOverride?: number | null, vOverride?: number) => {
     if (!connected) return;
@@ -143,7 +160,7 @@ const Dashboard = () => {
   const polarity = selectedIdx != null ? DEVICES[selectedIdx].polarityLabel : "—";
   const remote = telemetry?.remote ?? false;
 
-  const protocolBadge = useMemo(() => (isFineTuning || isManual ? "[PPS]" : "[PD]"), [isFineTuning, isManual]);
+  const protocolBadge = useMemo(() => (isFineTuning || isManual ? "PPS VOLTAGE" : "PPS CONTROL"), [isFineTuning, isManual]);
 
   const headerStatus = useMemo(() => {
     if (deviceState === "LOCKED") return { text: "POWER OUTPUT: ACTIVE", tone: "locked" as const };
@@ -262,12 +279,36 @@ const Dashboard = () => {
         </section>
 
         {/* Telemetry */}
-        <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <StatCard label="Device" value={deviceName} mono={false} />
-          <StatCard label="Voltage" value={`${Number(voltage).toFixed(2)} V`} accent />
-          <StatCard label="Current" value={`${Number(current).toFixed(2)} A`} accent />
-          <StatCard label="Polarity" value={polarity} small />
+        <section className="grid gap-4 lg:grid-cols-3">
+          <div className="panel p-5 lg:col-span-2">
+            <div className="flex items-center justify-between gap-3">
+              <div className="text-[10px] font-bold uppercase tracking-[0.22em] text-muted-foreground">
+                Active Device
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => returnToLocal(isManual ? "PPS VOLTAGE" : "PPS CONTROL")}
+                disabled={!connected || isLocked || selectedIdx === null}
+                className="h-7 rounded-full text-[10px] font-bold uppercase tracking-wider"
+              >
+                Return to Local
+              </Button>
+            </div>
+            <div
+              className="mt-2 truncate text-4xl font-extrabold text-foreground md:text-5xl lg:text-6xl"
+              title={deviceName}
+            >
+              {deviceName}
+            </div>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-3 lg:grid-cols-1">
+            <StatCard label="Voltage" value={`${Number(voltage).toFixed(2)} V`} accent small />
+            <StatCard label="Current" value={`${Number(current).toFixed(2)} A`} accent small />
+            <StatCard label="Polarity" value={polarity} small />
+          </div>
         </section>
+
 
         {/* Big power action */}
         <section className="panel p-5 md:p-6">
