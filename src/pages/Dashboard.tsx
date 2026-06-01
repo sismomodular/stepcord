@@ -151,9 +151,12 @@ const Dashboard = () => {
     if (connected && selectedIdx != null) sendSync();
   }, [connected]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const deviceName = selectedIdx != null ? DEVICES[selectedIdx].name : "—";
+  const deviceName = selectedIdx != null
+    ? (isManual ? (isFineTuning ? "PPS VOLTAGE" : "PPS CONTROL") : DEVICES[selectedIdx].name)
+    : "—";
   const voltage = isManual ? manualV : selectedIdx != null ? DEVICES[selectedIdx].voltage : 0;
   const current = selectedIdx != null ? DEVICES[selectedIdx].current : 0;
+  const power = Number((voltage * current).toFixed(2));
   const polarity = selectedIdx != null ? DEVICES[selectedIdx].polarityLabel : "—";
   const remote = telemetry?.remote ?? false;
 
@@ -161,10 +164,11 @@ const Dashboard = () => {
 
   const headerStatus = useMemo(() => {
     if (deviceState === "LOCKED") return { text: "POWER OUTPUT: ACTIVE", tone: "locked" as const };
-    if (deviceState === "FINE_TUNING") return { text: "MODE: MANUAL SETUP", tone: "tuning" as const };
+    if (deviceState === "FINE_TUNING") return { text: "[ PPS CONTROL ]", tone: "tuning" as const };
     if (deviceState === "SELECTING") return { text: "MODE: PROFILE SELECT", tone: "select" as const };
     return { text: "DISCONNECTED", tone: "off" as const };
   }, [deviceState]);
+
 
   return (
     <div className="min-h-screen bg-background text-foreground">
