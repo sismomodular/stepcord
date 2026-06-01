@@ -73,9 +73,9 @@ const Dashboard = () => {
     const manual = idx === MANUAL_IDX;
     const volt = manual ? (vOverride ?? manualV) : d.voltage;
     const state = stateOverride ?? deviceState;
-    const protocol = manual || state === "FINE_TUNING" ? "[PPS]" : "[PD]";
+    const protocol = manual || state === "FINE_TUNING" ? "PPS VOLTAGE" : "PPS CONTROL";
     return {
-      device: String(d.name).slice(0, 16),
+      device: String(d.name),
       voltage: Number(volt.toFixed(2)),
       current: Number(d.current.toFixed(2)),
       polarity: d.polarityLabel,
@@ -83,6 +83,23 @@ const Dashboard = () => {
       state,
     };
   }, [selectedIdx, manualV, deviceState]);
+
+  // Send a "return to local mode" frame: clears the active web profile and
+  // tells the hardware to display its own PPS CONTROL / PPS VOLTAGE label.
+  const returnToLocal = useCallback((mode: "PPS CONTROL" | "PPS VOLTAGE" = "PPS CONTROL") => {
+    if (isLocked) return;
+    setSelectedIdx(null);
+    setArmed(false);
+    if (!connected) return;
+    void send({
+      device: mode,
+      voltage: 0,
+      current: 0,
+      polarity: "",
+      protocol: mode,
+      state: "SELECTING",
+    });
+  }, [connected, isLocked, send]);
 
   const sendSync = useCallback((stateOverride?: DeviceState, idxOverride?: number | null, vOverride?: number) => {
     if (!connected) return;
