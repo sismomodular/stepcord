@@ -65,6 +65,14 @@ const Dashboard = () => {
   const isFineTuning = deviceState === "FINE_TUNING";
   const isSelecting = deviceState === "SELECTING";
 
+  // Local (non-web) profile names recognized by firmware. When the outgoing
+  // device name matches one of these, isWebMode = false. Any other name is
+  // assumed to be a user-defined web profile (isWebMode = true).
+  const LOCAL_PROFILE_NAMES = ["PPS CONTROL", "PPS VOLTAGE"] as const;
+  const WEB_FALLBACK_NAME = "Web Profile";
+  const isWebProfileName = (name: string) =>
+    !!name && !LOCAL_PROFILE_NAMES.includes(name.toUpperCase() as typeof LOCAL_PROFILE_NAMES[number]);
+
   // Build the unified payload from local state.
   const buildPayload = useCallback((stateOverride?: DeviceState, idxOverride?: number | null, vOverride?: number) => {
     const idx = idxOverride ?? selectedIdx;
@@ -74,15 +82,21 @@ const Dashboard = () => {
     const volt = manual ? (vOverride ?? manualV) : d.voltage;
     const state = stateOverride ?? deviceState;
     const protocol = manual || state === "FINE_TUNING" ? "[PPS]" : "[PD]";
+    // Local PPS modes report a fixed system name so the firmware can flag isWebMode=false.
+    const rawName = manual
+      ? (state === "FINE_TUNING" ? "PPS VOLTAGE" : "PPS CONTROL")
+      : String(d.name);
     return {
-      device: String(d.name).slice(0, 16),
+      device: rawName.slice(0, 16),
       voltage: Number(volt.toFixed(2)),
       current: Number(d.current.toFixed(2)),
       polarity: d.polarityLabel,
       protocol,
       state,
+      isWebMode: isWebProfileName(rawName),
     };
   }, [selectedIdx, manualV, deviceState]);
+
 
   const sendSync = useCallback((stateOverride?: DeviceState, idxOverride?: number | null, vOverride?: number) => {
     if (!connected) return;
