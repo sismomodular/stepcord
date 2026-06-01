@@ -423,7 +423,7 @@ const Dashboard = () => {
                 >
                   <div className="min-w-0">
                     <div className="truncate text-sm font-bold">
-                      {manualEntry ? "[ MANUAL MODE ]" : d.name}
+                      {manualEntry ? "[ PPS CONTROL ]" : d.name}
                     </div>
                     <div className="mt-0.5 truncate text-xs text-muted-foreground">
                       {d.brand} · <span className="font-mono-tech">{d.voltage.toFixed(1)} V · {d.current.toFixed(2)} A</span>
