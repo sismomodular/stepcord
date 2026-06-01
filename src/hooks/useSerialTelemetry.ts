@@ -354,13 +354,26 @@ async function sendHardwareCommand(payload: SerialCommand) {
     return;
   }
   try {
-    const stateId = stateToId(payload.state);
+    const stateName = String(payload.state ?? "").toUpperCase();
     const voltage = Number(payload.voltage ?? 0);
     const current = Number(payload.current ?? 0);
-    const rawName = String(payload.device ?? "").replace(/[,\r\n]/g, " ").trim().slice(0, 30);
-    const line = `${stateId},${voltage.toFixed(1)},${current.toFixed(1)},${rawName}\n`;
-    await writer.write(new TextEncoder().encode(line));
-    console.log("Serial sent:", line.trim());
+    const rawName = String(payload.device ?? "").replace(/["\r\n]/g, " ").trim().slice(0, 30);
+    const isManual = /MANUAL/i.test(rawName) || stateName === "FINE_TUNING";
+
+    const lines: string[] = [];
+    if (isManual) {
+      lines.push(`{"set":"pps","v":${voltage.toFixed(2)},"i":${current.toFixed(2)}}`);
+    } else if (rawName) {
+      lines.push(`{"select":"${rawName}"}`);
+    }
+    lines.push(`{"output":"${stateName === "LOCKED" ? "on" : "off"}"}`);
+
+    const enc = new TextEncoder();
+    for (const l of lines) {
+      const wire = l + "\n";
+      await writer.write(enc.encode(wire));
+      console.log("Serial sent:", wire.trim());
+    }
     setState({ error: null });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Error sending over serial.";
