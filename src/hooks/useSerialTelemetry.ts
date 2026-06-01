@@ -222,7 +222,9 @@ const handleLine = (raw: string) => {
     return;
   }
 
-  // JSON: button event or telemetry
+  // JSON telemetry from firmware:
+  // {"v":..,"i":..,"p":..,"mode":"PPS|FIXED","profile":"name",
+  //  "polarity":"center-positive|center-negative","en":true|false,"err":".."}
   if (line.startsWith("{")) {
     try {
       const obj = JSON.parse(line);
@@ -231,12 +233,18 @@ const handleLine = (raw: string) => {
         if (k === "UP" || k === "DOWN" || k === "ENTER") fireButton(k as HardwareButton);
         return;
       }
-      // Optional telemetry frame
       const voltage = Number(obj.voltage ?? obj.v);
       const current = Number(obj.current ?? obj.i);
-      if (Number.isFinite(voltage) || Number.isFinite(current)) {
+      const hasAny =
+        Number.isFinite(voltage) ||
+        Number.isFinite(current) ||
+        typeof obj.profile === "string" ||
+        typeof obj.mode === "string" ||
+        obj.en !== undefined;
+      if (hasAny) {
         const v = Number.isFinite(voltage) ? voltage : 0;
         const i = Number.isFinite(current) ? current : 0;
+        const outputOn = obj.en === true || obj.en === "true" || obj.en === 1;
         setState({
           telemetry: {
             v,
@@ -244,10 +252,14 @@ const handleLine = (raw: string) => {
             p: +(v * i).toFixed(2),
             voltage: v,
             current: i,
-            state: typeof obj.state === "string" ? obj.state : undefined,
-            remote: obj.remote === true || obj.remote === 1,
+            mode: obj.mode === "PPS" ? "PPS" : obj.mode === "FIXED" ? "PD" : undefined,
+            device: typeof obj.profile === "string" ? obj.profile : undefined,
+            polarity: typeof obj.polarity === "string" ? obj.polarity : undefined,
+            state: outputOn ? "LOCKED" : (obj.mode === "PPS" ? "FINE_TUNING" : "SELECTING"),
+            output: outputOn ? 1 : 0,
+            remote: true,
           },
-          error: null,
+          error: typeof obj.err === "string" && obj.err.length ? obj.err : null,
         });
       }
     } catch (e) {
