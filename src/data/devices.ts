@@ -12,7 +12,7 @@ export type MusicalDevice = {
 // Local device database — MUST match the firmware profile array (indices 0..N).
 export const DEVICES: MusicalDevice[] = [
   { name: "Quad Cortex",            brand: "Neural DSP",        voltage: 12.0, current: 3.0, defaultPolarity: "center-negative", polarityLabel: "USE INVERTER C-" },
-  { name: "SP-404 MKII",            brand: "Roland",            voltage:  6.0, current: 1.1, defaultPolarity: "center-positive", polarityLabel: "KEEP CENTER + " },
+  { name: "SP-404 MKII",            brand: "Roland",            voltage:  6.0, current: 1.1, defaultPolarity: "center-negative", polarityLabel: "USE INVERTER C-" },
   { name: "Digitakt II",            brand: "Elektron",          voltage: 12.0, current: 2.0, defaultPolarity: "center-positive", polarityLabel: "KEEP CENTER + " },
   { name: "HX Stomp / XL",          brand: "Line 6",            voltage:  9.0, current: 3.0, defaultPolarity: "center-negative", polarityLabel: "USE INVERTER C-" },
   { name: "S-4",                    brand: "Torso Electronics", voltage: 12.0, current: 2.0, defaultPolarity: "center-positive", polarityLabel: "KEEP CENTER + " },
