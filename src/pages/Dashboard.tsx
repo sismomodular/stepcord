@@ -238,7 +238,7 @@ const Dashboard = () => {
 
         {/* Telemetry */}
         <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <StatCard label="Device" value={deviceName} mono={false} />
+          <StatCard label="Device" value={deviceName} mono={false} hero />
           <StatCard label="Voltage" value={`${Number(voltage).toFixed(2)} V`} accent />
           <StatCard label="Current" value={`${Number(current).toFixed(2)} A`} accent />
           <StatCard label="Polarity" value={polarity} small />
