@@ -238,7 +238,7 @@ const Dashboard = () => {
 
         {/* Telemetry */}
         <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <StatCard label="Device" value={deviceName} mono={false} />
+          <StatCard label="Device" value={deviceName} mono={false} hero />
           <StatCard label="Voltage" value={`${Number(voltage).toFixed(2)} V`} accent />
           <StatCard label="Current" value={`${Number(current).toFixed(2)} A`} accent />
           <StatCard label="Polarity" value={polarity} small />
@@ -364,14 +364,14 @@ const Dashboard = () => {
 };
 
 const StatCard = ({
-  label, value, accent, small, mono = true,
-}: { label: string; value: string; accent?: boolean; small?: boolean; mono?: boolean }) => (
-  <div className="panel p-5">
+  label, value, accent, small, mono = true, hero,
+}: { label: string; value: string; accent?: boolean; small?: boolean; mono?: boolean; hero?: boolean }) => (
+  <div className={`panel ${hero ? "p-6 md:p-8" : "p-5"}`}>
     <div className="text-[10px] font-bold uppercase tracking-[0.22em] text-muted-foreground">{label}</div>
     <div
       className={`mt-2 truncate font-extrabold ${mono ? "font-mono-tech" : ""} ${
         accent ? "text-primary" : "text-foreground"
-      } ${small ? "text-lg" : "text-3xl md:text-4xl"}`}
+      } ${small ? "text-lg" : hero ? "text-4xl md:text-5xl lg:text-6xl" : "text-3xl md:text-4xl"}`}
       title={value}
     >
       {value}
