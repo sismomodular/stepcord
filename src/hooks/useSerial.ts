@@ -71,26 +71,52 @@ export function useSerial({ autoReconnect, onReading, onEvent }: UseSerialOption
         buffer += value;
         let nl: number;
         while ((nl = buffer.indexOf('\n')) >= 0) {
-          const line = buffer.slice(0, nl).trim();
+          const line = buffer.slice(0, nl).trim().replace(/\r$/, '');
           buffer = buffer.slice(nl + 1);
           if (!line) continue;
-          try {
-            const obj = JSON.parse(line) as { v?: number; i?: number; msg?: string };
-            if (typeof obj.v === 'number' && typeof obj.i === 'number') {
+
+          // Encoder rotation events from firmware: "ENC:CW" / "ENC:CCW"
+          if (line.startsWith('ENC:')) {
+            const dir = line.slice(4);
+            onEventRef.current({
+              type: 'info',
+              message: `Encoder ${dir === 'CW' ? 'clockwise' : 'counter-clockwise'}`,
+            });
+            continue;
+          }
+
+          // Firmware CSV echo: "state,voltage,current,name"
+          // state: 0 = STANDBY, 3 = LIVE
+          const parts = line.split(',');
+          if (parts.length >= 3) {
+            const state = parseInt(parts[0], 10);
+            const v = parseFloat(parts[1]);
+            const i = parseFloat(parts[2]);
+            const name = parts.slice(3).join(',').trim();
+            if (Number.isFinite(v) && Number.isFinite(i)) {
+              // When output is off (state 0), report zeros for current/power
+              // but keep configured target voltage so UI reflects setpoint.
+              const liveV = state === 3 ? v : 0;
+              const liveI = state === 3 ? i : 0;
               const reading: TelemetryReading = {
-                voltage: obj.v,
-                current: obj.i,
-                power: parseFloat((obj.v * obj.i).toFixed(2)),
+                voltage: liveV,
+                current: liveI,
+                power: parseFloat((liveV * liveI).toFixed(2)),
                 timestamp: Date.now(),
               };
               onReadingRef.current(reading);
+              onEventRef.current({
+                type: state === 3 ? 'success' : 'info',
+                message: state === 3
+                  ? `LIVE · ${v.toFixed(1)}V / ${i.toFixed(1)}A${name ? ` · ${name}` : ''}`
+                  : `STANDBY${name ? ` · ${name}` : ''}`,
+              });
+              continue;
             }
-            if (obj.msg) {
-              onEventRef.current({ type: 'info', message: obj.msg });
-            }
-          } catch {
-            // ignore non-JSON lines
           }
+
+          // Any other firmware log line — surface as info
+          onEventRef.current({ type: 'info', message: line });
         }
       }
     } catch (err) {

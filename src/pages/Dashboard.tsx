@@ -73,21 +73,37 @@ export default function Dashboard() {
   const activePdo = PDOS.find(p => p.index === activePdoIndex) ?? null;
   const activePdoType = activePdo?.type;
 
+  // Firmware protocol: "state,voltage,current,name\n"
+  // state: 0 = STANDBY (output off), 3 = LIVE (output on)
+  const sendProfile = useCallback(
+    (state: 0 | 3, voltage: number, current: number, name: string) => {
+      const line = `${state},${voltage.toFixed(1)},${current.toFixed(1)},${name}`;
+      void serial.sendCommand(line);
+    },
+    [serial],
+  );
+
   const handleSelectPdo = useCallback((pdo: PDO) => {
     setActivePdoIndex(pdo.index);
     if (pdo.type === 'pps') {
       pushEvent({ type: 'info', message: `PDO ${pdo.index} selected · PPS mode` });
+      sendProfile(3, ppsConfig.targetVoltage, ppsConfig.currentLimit, 'Web Profile');
     } else {
       pushEvent({
         type: 'info',
         message: `PDO ${pdo.index} selected · ${pdo.voltage}V/${pdo.current}A`,
       });
+      sendProfile(3, pdo.voltage, pdo.current, `PDO ${pdo.index}`);
     }
-    // Best-effort forward to firmware
-    void serial.sendCommand(
-      JSON.stringify({ cmd: 'pdo', index: pdo.index, type: pdo.type })
-    );
-  }, [pushEvent, serial]);
+  }, [pushEvent, sendProfile, ppsConfig]);
+
+  const handleApplyPps = useCallback(() => {
+    sendProfile(3, ppsConfig.targetVoltage, ppsConfig.currentLimit, 'Web Profile');
+    pushEvent({
+      type: 'info',
+      message: `PPS apply · ${ppsConfig.targetVoltage.toFixed(1)}V / ${ppsConfig.currentLimit.toFixed(1)}A`,
+    });
+  }, [ppsConfig, sendProfile, pushEvent]);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -121,6 +137,7 @@ export default function Dashboard() {
             config={ppsConfig}
             onChange={setPpsConfig}
             isActive={activePdoType === 'pps'}
+            onApply={handleApplyPps}
           />
         </div>
 

@@ -4,9 +4,10 @@ interface PpsControlProps {
   config: PPSConfig;
   onChange: (config: PPSConfig) => void;
   isActive: boolean;
+  onApply?: () => void;
 }
 
-export default function PpsControl({ config, onChange, isActive }: PpsControlProps) {
+export default function PpsControl({ config, onChange, isActive, onApply }: PpsControlProps) {
   const setVoltage = (v: number) => onChange({ ...config, targetVoltage: v });
   const setCurrent = (a: number) => onChange({ ...config, currentLimit: a });
 
@@ -68,6 +69,7 @@ export default function PpsControl({ config, onChange, isActive }: PpsControlPro
 
           <button
             disabled={!isActive}
+            onClick={onApply}
             className="rounded-md bg-gray-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50"
           >
             Apply
