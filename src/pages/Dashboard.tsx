@@ -45,6 +45,7 @@ export default function Dashboard() {
   const [activePdoIndex, setActivePdoIndex] = useState<number>(3);
   const [ppsConfig, setPpsConfig] = useState<PPSConfig>({ targetVoltage: 12.0, currentLimit: 2.0 });
   const [events, setEvents] = useState<LogEvent[]>(SEED_EVENTS);
+  const [activeProfileName, setActiveProfileName] = useState<string | null>(null);
 
   // Real serial readings populate these when hardware is connected
   const [serialReading, setSerialReading] = useState<TelemetryReading | null>(null);
