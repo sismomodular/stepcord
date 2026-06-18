@@ -160,8 +160,7 @@ export default function Dashboard() {
 
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <OledPreview
-            reading={reading}
-            activePdo={activePdo}
+            firmwareState={serial.firmwareState}
             deviceInfo={serial.deviceInfo}
           />
           <EventLog events={events} />
