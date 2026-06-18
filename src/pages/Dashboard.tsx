@@ -8,9 +8,11 @@ import PdoSelector from '../components/dashboard/PdoSelector';
 import PpsControl from '../components/dashboard/PpsControl';
 import OledPreview from '../components/dashboard/OledPreview';
 import EventLog, { LogEvent } from '../components/dashboard/EventLog';
+import DeviceProfileSelector from '../components/dashboard/DeviceProfileSelector';
 
 import { useTelemetry } from '../hooks/useTelemetry';
 import { useSerial } from '../hooks/useSerial';
+import { type MusicalDevice } from '../data/devices';
 import {
   PDO,
   PPSConfig,
@@ -43,6 +45,7 @@ export default function Dashboard() {
   const [activePdoIndex, setActivePdoIndex] = useState<number>(3);
   const [ppsConfig, setPpsConfig] = useState<PPSConfig>({ targetVoltage: 12.0, currentLimit: 2.0 });
   const [events, setEvents] = useState<LogEvent[]>(SEED_EVENTS);
+  const [activeProfileName, setActiveProfileName] = useState<string | null>(null);
 
   // Real serial readings populate these when hardware is connected
   const [serialReading, setSerialReading] = useState<TelemetryReading | null>(null);
@@ -105,6 +108,15 @@ export default function Dashboard() {
     });
   }, [ppsConfig, sendProfile, pushEvent]);
 
+  const handleSelectProfile = useCallback((device: MusicalDevice) => {
+    setActiveProfileName(device.name);
+    sendProfile(3, device.voltage, device.current, device.name);
+    pushEvent({
+      type: 'info',
+      message: `Profile · ${device.name} (${device.voltage.toFixed(1)}V / ${device.current.toFixed(1)}A)`,
+    });
+  }, [sendProfile, pushEvent]);
+
   return (
     <div className="min-h-screen bg-gray-50">
       <ConnectionBar
@@ -140,6 +152,11 @@ export default function Dashboard() {
             onApply={handleApplyPps}
           />
         </div>
+
+        <DeviceProfileSelector
+          activeName={activeProfileName}
+          onSelect={handleSelectProfile}
+        />
 
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <OledPreview
