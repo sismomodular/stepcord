@@ -21,6 +21,7 @@ interface UseSerialOptions {
   autoReconnect: boolean;
   onReading: (r: TelemetryReading) => void;
   onEvent: (e: Omit<LogEvent, 'timestamp'>) => void;
+  onEncoder?: (dir: 'CW' | 'CCW') => void;
 }
 
 interface UseSerialResult {
@@ -41,7 +42,7 @@ type SerialPortLike = {
   getInfo?: () => { usbVendorId?: number; usbProductId?: number };
 };
 
-export function useSerial({ autoReconnect, onReading, onEvent }: UseSerialOptions): UseSerialResult {
+export function useSerial({ autoReconnect, onReading, onEvent, onEncoder }: UseSerialOptions): UseSerialResult {
   const supported = typeof navigator !== 'undefined' && 'serial' in navigator;
 
   const [status, setStatus] = useState<ConnectionStatus>('disconnected');
@@ -58,8 +59,10 @@ export function useSerial({ autoReconnect, onReading, onEvent }: UseSerialOption
   // Keep latest callbacks without re-binding the read loop
   const onReadingRef = useRef(onReading);
   const onEventRef = useRef(onEvent);
+  const onEncoderRef = useRef(onEncoder);
   useEffect(() => { onReadingRef.current = onReading; }, [onReading]);
   useEffect(() => { onEventRef.current = onEvent; }, [onEvent]);
+  useEffect(() => { onEncoderRef.current = onEncoder; }, [onEncoder]);
 
   const cleanupStreams = useCallback(async () => {
     try { await readerRef.current?.cancel(); } catch { /* noop */ }
@@ -94,7 +97,8 @@ export function useSerial({ autoReconnect, onReading, onEvent }: UseSerialOption
 
           // Encoder rotation events from firmware: "ENC:CW" / "ENC:CCW"
           if (line.startsWith('ENC:')) {
-            const dir = line.slice(4);
+            const dir = line.slice(4) === 'CW' ? 'CW' : 'CCW';
+            onEncoderRef.current?.(dir);
             onEventRef.current({
               type: 'info',
               message: `Encoder ${dir === 'CW' ? 'clockwise' : 'counter-clockwise'}`,
