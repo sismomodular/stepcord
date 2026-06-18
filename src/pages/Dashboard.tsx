@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { Settings, Bookmark, Download } from 'lucide-react';
 
 import ConnectionBar from '../components/dashboard/ConnectionBar';
@@ -43,6 +43,7 @@ const SEED_EVENTS: LogEvent[] = (() => {
 })();
 
 export default function Dashboard() {
+  const navigate = useNavigate();
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('connected');
   const [deviceInfo, setDeviceInfo] = useState<DeviceInfo | null>(DEFAULT_DEVICE);
   const [activePdoIndex, setActivePdoIndex] = useState<number>(3);
@@ -124,27 +125,27 @@ export default function Dashboard() {
         </div>
 
         <div className="flex justify-end gap-2">
-          <Link
-            to="/settings"
+          <button
+            onClick={() => navigate('/settings')}
             className="inline-flex items-center gap-1.5 rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
           >
             <Settings className="h-4 w-4" />
             Settings
-          </Link>
-          <Link
-            to="/settings?tab=presets"
+          </button>
+          <button
+            onClick={() => navigate('/settings#presets')}
             className="inline-flex items-center gap-1.5 rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
           >
             <Bookmark className="h-4 w-4" />
             Presets
-          </Link>
-          <Link
-            to="/settings?tab=data"
+          </button>
+          <button
+            onClick={() => navigate('/settings#data')}
             className="inline-flex items-center gap-1.5 rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
           >
             <Download className="h-4 w-4" />
             Export
-          </Link>
+          </button>
         </div>
       </main>
     </div>

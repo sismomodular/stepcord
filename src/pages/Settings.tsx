@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, Plug, LayoutDashboard, Bell, Bookmark, Database, User,
   Trash2, Plus, Download,
@@ -72,16 +72,18 @@ export default function Settings() {
   const update = <K extends keyof AppSettings>(key: K, patch: Partial<AppSettings[K]>) =>
     setSettings(prev => ({ ...prev, [key]: { ...prev[key], ...patch } }));
 
+  const navigate = useNavigate();
+
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="mx-auto max-w-2xl space-y-4 p-6">
-        <Link
-          to="/"
+        <button
+          onClick={() => navigate('/')}
           className="inline-flex items-center gap-1.5 text-sm font-medium text-gray-600 hover:text-gray-900"
         >
           <ArrowLeft className="h-4 w-4" />
           Dashboard
-        </Link>
+        </button>
 
         <h1 className="text-2xl font-semibold text-gray-900">Settings</h1>
 
