@@ -97,7 +97,8 @@ export function useSerial({ autoReconnect, onReading, onEvent, onEncoder }: UseS
 
           // Encoder rotation events from firmware: "ENC:CW" / "ENC:CCW"
           if (line.startsWith('ENC:')) {
-            const dir = line.slice(4);
+            const dir = line.slice(4) === 'CW' ? 'CW' : 'CCW';
+            onEncoderRef.current?.(dir);
             onEventRef.current({
               type: 'info',
               message: `Encoder ${dir === 'CW' ? 'clockwise' : 'counter-clockwise'}`,
