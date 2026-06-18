@@ -56,7 +56,9 @@ export function useSerial({ autoReconnect, onReading, onEvent }: UseSerialOption
   const startReadLoop = useCallback(async (port: SerialPortLike) => {
     if (!port.readable) return;
     const decoder = new TextDecoderStream();
-    const closed = port.readable.pipeTo(decoder.writable).catch(() => { /* stream ended */ });
+    const closed = (port.readable as ReadableStream<Uint8Array>)
+      .pipeTo(decoder.writable as unknown as WritableStream<Uint8Array>)
+      .catch(() => { /* stream ended */ });
     const reader = decoder.readable.getReader();
     readerRef.current = reader;
 
