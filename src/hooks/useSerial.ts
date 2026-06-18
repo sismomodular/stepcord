@@ -46,6 +46,7 @@ export function useSerial({ autoReconnect, onReading, onEvent }: UseSerialOption
 
   const [status, setStatus] = useState<ConnectionStatus>('disconnected');
   const [deviceInfo, setDeviceInfo] = useState<DeviceInfo | null>(null);
+  const [firmwareState, setFirmwareState] = useState<FirmwareState | null>(null);
 
   const portRef = useRef<SerialPortLike | null>(null);
   const readerRef = useRef<ReadableStreamDefaultReader<string> | null>(null);
