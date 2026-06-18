@@ -8,9 +8,11 @@ import PdoSelector from '../components/dashboard/PdoSelector';
 import PpsControl from '../components/dashboard/PpsControl';
 import OledPreview from '../components/dashboard/OledPreview';
 import EventLog, { LogEvent } from '../components/dashboard/EventLog';
+import DeviceProfileSelector from '../components/dashboard/DeviceProfileSelector';
 
 import { useTelemetry } from '../hooks/useTelemetry';
 import { useSerial } from '../hooks/useSerial';
+import { type MusicalDevice } from '../data/devices';
 import {
   PDO,
   PPSConfig,
