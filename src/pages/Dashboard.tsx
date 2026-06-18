@@ -108,6 +108,15 @@ export default function Dashboard() {
     });
   }, [ppsConfig, sendProfile, pushEvent]);
 
+  const handleSelectProfile = useCallback((device: MusicalDevice) => {
+    setActiveProfileName(device.name);
+    sendProfile(3, device.voltage, device.current, device.name);
+    pushEvent({
+      type: 'info',
+      message: `Profile · ${device.name} (${device.voltage.toFixed(1)}V / ${device.current.toFixed(1)}A)`,
+    });
+  }, [sendProfile, pushEvent]);
+
   return (
     <div className="min-h-screen bg-gray-50">
       <ConnectionBar
