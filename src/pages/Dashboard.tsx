@@ -60,10 +60,30 @@ export default function Dashboard() {
     setSerialHistory(prev => [...prev.slice(-(HISTORY_LIMIT - 1)), r]);
   }, []);
 
+  // Encoder navigation: rotating the hardware encoder cycles through device
+  // profiles (excluding the Manual Mode entry) and applies the selection.
+  const handleSelectProfileRef = useRef<((d: MusicalDevice) => void) | null>(null);
+  const activeProfileNameRef = useRef<string | null>(activeProfileName);
+  useEffect(() => { activeProfileNameRef.current = activeProfileName; }, [activeProfileName]);
+
+  const handleEncoder = useCallback((dir: 'CW' | 'CCW') => {
+    const browsable = DEVICES.filter((_, i) => i !== MANUAL_IDX);
+    if (browsable.length === 0) return;
+    const currentName = activeProfileNameRef.current;
+    const currentIdx = browsable.findIndex(d => d.name === currentName);
+    const step = dir === 'CW' ? 1 : -1;
+    const nextIdx =
+      currentIdx < 0
+        ? (dir === 'CW' ? 0 : browsable.length - 1)
+        : (currentIdx + step + browsable.length) % browsable.length;
+    handleSelectProfileRef.current?.(browsable[nextIdx]);
+  }, []);
+
   const serial = useSerial({
     autoReconnect: true,
     onReading: handleReading,
     onEvent: pushEvent,
+    onEncoder: handleEncoder,
   });
 
   // Fallback simulated telemetry — runs only when not connected to real hardware
