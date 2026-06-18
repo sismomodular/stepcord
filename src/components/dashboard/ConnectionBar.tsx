@@ -13,10 +13,10 @@ export default function ConnectionBar({ status, deviceInfo, onConnect, onDisconn
   const isConnecting = status === 'connecting';
 
   return (
-    <header className="flex items-center justify-between gap-4 border-b border-gray-200 bg-white px-6 py-3">
+    <header className="sticky top-0 z-10 flex h-14 items-center justify-between gap-4 border-b border-gray-100 bg-white px-6">
       <div className="flex items-center gap-2">
         <Zap className="h-5 w-5 text-yellow-500" fill="currentColor" />
-        <span className="text-base font-semibold text-gray-900">PicoPD Control</span>
+        <span className="text-base font-medium text-gray-900">PicoPD Control</span>
       </div>
 
       <div className="flex items-center gap-3">

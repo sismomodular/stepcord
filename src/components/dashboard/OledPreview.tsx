@@ -37,11 +37,17 @@ export default function OledPreview({ reading, activePdo, deviceInfo }: OledPrev
 
   return (
     <div>
-      <div className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-500">
+      <div className="mb-3 text-xs font-medium uppercase tracking-widest text-gray-400">
         OLED preview
       </div>
-      <div className="rounded-xl border border-gray-100 bg-white p-4">
-        <div className="rounded-md p-3 font-mono text-sm leading-6" style={{ backgroundColor: '#0a0a0a' }}>
+      <div className="rounded-2xl border border-gray-100 bg-white p-5">
+        <div
+          className="rounded-lg p-3 font-mono text-sm leading-6"
+          style={{
+            backgroundColor: '#0a0a0a',
+            boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.06)',
+          }}
+        >
           <Row label="V:" value={fmt(reading.voltage)} unit="V" />
           <Row label="I:" value={fmt(reading.current)} unit="A" />
           <Row label="P:" value={fmt(reading.power)} unit="W" />

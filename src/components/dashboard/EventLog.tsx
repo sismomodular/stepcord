@@ -58,10 +58,10 @@ export default function EventLog({ events }: EventLogProps) {
 
   return (
     <div>
-      <div className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-500">
+      <div className="mb-3 text-xs font-medium uppercase tracking-widest text-gray-400">
         Event log
       </div>
-      <div className="max-h-[160px] overflow-y-auto rounded-xl border border-gray-100 bg-white">
+      <div className="max-h-[160px] overflow-y-auto rounded-2xl border border-gray-100 bg-white">
         {list.map((ev, i) => (
           <div
             key={i}

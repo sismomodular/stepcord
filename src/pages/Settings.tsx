@@ -61,7 +61,7 @@ function Card({
 const selectCls =
   'rounded-md border border-gray-300 bg-white px-2 py-1 text-sm text-gray-900 focus:border-blue-500 focus:outline-none';
 const numCls =
-  'w-20 rounded-md border border-gray-300 bg-white px-2 py-1 text-sm text-gray-900 focus:border-blue-500 focus:outline-none';
+  'w-20 rounded-md border border-gray-300 bg-white px-2 py-1 text-sm text-right tabular-nums text-gray-900 focus:border-blue-500 focus:outline-none';
 const btnCls =
   'rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50';
 
