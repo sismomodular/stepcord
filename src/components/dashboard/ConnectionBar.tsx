@@ -14,10 +14,33 @@ export default function ConnectionBar({ status, deviceInfo, onConnect, onDisconn
 
   return (
     <header className="sticky top-0 z-10 flex h-14 items-center justify-between gap-4 border-b border-gray-100 bg-white px-6">
-      <div className="flex items-center gap-2.5">
+      <button
+        type="button"
+        onClick={isConnected ? undefined : onConnect}
+        disabled={isConnecting || isConnected}
+        title={
+          isConnected
+            ? 'Connected to PicoPD'
+            : isConnecting
+              ? 'Connecting to PicoPD…'
+              : 'Click to connect to PicoPD'
+        }
+        className={[
+          'flex items-center gap-2.5 rounded-md px-2 py-1 -mx-2 transition-colors',
+          isConnected
+            ? 'cursor-default'
+            : 'hover:bg-gray-50 active:bg-gray-100 cursor-pointer',
+          isConnecting ? 'opacity-60' : '',
+        ].join(' ')}
+      >
         <img src={myVoltsLogo} alt="MyVolts" className="h-7 w-auto" />
         <span className="text-base font-medium text-gray-900">PicoPD Control</span>
-      </div>
+        {!isConnected && !isConnecting && (
+          <span className="ml-1 hidden text-xs text-gray-400 sm:inline">
+            click to connect
+          </span>
+        )}
+      </button>
 
       <div className="flex items-center gap-3">
         {isConnected ? (
@@ -41,20 +64,12 @@ export default function ConnectionBar({ status, deviceInfo, onConnect, onDisconn
           </span>
         )}
 
-        {isConnected ? (
+        {isConnected && (
           <button
             onClick={onDisconnect}
             className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
           >
             Disconnect
-          </button>
-        ) : (
-          <button
-            onClick={onConnect}
-            disabled={isConnecting}
-            className="rounded-md bg-gray-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
-          >
-            {isConnecting ? 'Connecting…' : 'Connect'}
           </button>
         )}
       </div>
