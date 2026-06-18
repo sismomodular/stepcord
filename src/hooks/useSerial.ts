@@ -245,5 +245,5 @@ export function useSerial({ autoReconnect, onReading, onEvent }: UseSerialOption
     };
   }, [cleanupStreams]);
 
-  return { supported, status, deviceInfo, connect, disconnect, sendCommand };
+  return { supported, status, deviceInfo, firmwareState, connect, disconnect, sendCommand };
 }
