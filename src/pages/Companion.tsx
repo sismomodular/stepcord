@@ -326,7 +326,7 @@ const Companion = () => {
         {fiveVoltDanger && (
           <div className="rounded-xl border-2 border-destructive bg-destructive/20 px-5 py-4 text-destructive font-extrabold text-lg flex items-center gap-3 animate-pulse">
             <ShieldAlert className="h-6 w-6" />
-            PERIGO: SOBRETENSÃO DETECTADA EM DISPOSITIVO 5V
+            DANGER: OVERVOLTAGE DETECTED ON 5V DEVICE
           </div>
         )}
         {telemetry?.err && (
