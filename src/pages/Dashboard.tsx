@@ -137,6 +137,8 @@ export default function Dashboard() {
     });
   }, [sendProfile, pushEvent]);
 
+  useEffect(() => { handleSelectProfileRef.current = handleSelectProfile; }, [handleSelectProfile]);
+
   return (
     <div className="min-h-screen bg-gray-50">
       <ConnectionBar
