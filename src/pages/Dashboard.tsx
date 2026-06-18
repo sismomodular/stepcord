@@ -12,7 +12,7 @@ import DeviceProfileSelector from '../components/dashboard/DeviceProfileSelector
 
 import { useTelemetry } from '../hooks/useTelemetry';
 import { useSerial } from '../hooks/useSerial';
-import { type MusicalDevice } from '../data/devices';
+import { DEVICES, MANUAL_IDX, type MusicalDevice } from '../data/devices';
 import {
   PDO,
   PPSConfig,
