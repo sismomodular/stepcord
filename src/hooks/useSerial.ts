@@ -2,6 +2,21 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { ConnectionStatus, DeviceInfo, TelemetryReading } from '../types/picopd';
 import type { LogEvent } from '../components/dashboard/EventLog';
 
+export interface FirmwareState {
+  /** 0 = STANDBY (output off), 3 = LIVE (output on) */
+  state: 0 | 3;
+  /** Target voltage from firmware echo (V) */
+  targetVoltage: number;
+  /** Target current limit from firmware echo (A) */
+  targetCurrent: number;
+  /** Active device profile name (e.g. "MANUAL CONTROL", "Web Profile", or device name) */
+  name: string;
+  /** True when name is a web-loaded profile (not MANUAL CONTROL / MANUAL VOLTAGE) */
+  isWebMode: boolean;
+  /** Timestamp of last echo */
+  timestamp: number;
+}
+
 interface UseSerialOptions {
   autoReconnect: boolean;
   onReading: (r: TelemetryReading) => void;
@@ -12,6 +27,7 @@ interface UseSerialResult {
   supported: boolean;
   status: ConnectionStatus;
   deviceInfo: DeviceInfo | null;
+  firmwareState: FirmwareState | null;
   connect: () => Promise<void>;
   disconnect: () => Promise<void>;
   sendCommand: (cmd: string) => Promise<void>;
