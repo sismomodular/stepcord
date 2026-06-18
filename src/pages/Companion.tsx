@@ -307,7 +307,7 @@ const Companion = () => {
           <div className="rounded-xl border-4 border-destructive bg-destructive/25 px-5 py-5 text-destructive font-extrabold text-xl flex flex-wrap items-center justify-between gap-3 animate-pulse">
             <div className="flex items-center gap-3">
               <ShieldAlert className="h-7 w-7" />
-              POSSÍVEL CURTO-CIRCUITO OU POLARIDADE INVERTIDA DETECTADA! SAÍDA CORTADA POR SEGURANÇA
+              POSSIBLE SHORT CIRCUIT OR REVERSED POLARITY DETECTED — OUTPUT CUT FOR SAFETY
             </div>
             <div className="font-mono-tech text-sm">
               V={fmt(shortAlarm.v)} V · I={fmt(shortAlarm.i)} A · {timeStr(shortAlarm.ts)}
@@ -326,7 +326,7 @@ const Companion = () => {
         {fiveVoltDanger && (
           <div className="rounded-xl border-2 border-destructive bg-destructive/20 px-5 py-4 text-destructive font-extrabold text-lg flex items-center gap-3 animate-pulse">
             <ShieldAlert className="h-6 w-6" />
-            PERIGO: SOBRETENSÃO DETECTADA EM DISPOSITIVO 5V
+            DANGER: OVERVOLTAGE DETECTED ON 5V DEVICE
           </div>
         )}
         {telemetry?.err && (
