@@ -1,5 +1,5 @@
-import { Zap } from 'lucide-react';
 import { ConnectionStatus, DeviceInfo } from '../../types/picopd';
+import myVoltsLogo from '../../assets/myvolts-logo.png';
 
 interface ConnectionBarProps {
   status: ConnectionStatus;
@@ -14,8 +14,8 @@ export default function ConnectionBar({ status, deviceInfo, onConnect, onDisconn
 
   return (
     <header className="sticky top-0 z-10 flex h-14 items-center justify-between gap-4 border-b border-gray-100 bg-white px-6">
-      <div className="flex items-center gap-2">
-        <Zap className="h-5 w-5 text-yellow-500" fill="currentColor" />
+      <div className="flex items-center gap-2.5">
+        <img src={myVoltsLogo} alt="MyVolts" className="h-7 w-auto" />
         <span className="text-base font-medium text-gray-900">PicoPD Control</span>
       </div>
 
