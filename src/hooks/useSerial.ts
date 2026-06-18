@@ -178,6 +178,7 @@ export function useSerial({ autoReconnect, onReading, onEvent }: UseSerialOption
       try { await port.close(); } catch { /* noop */ }
       portRef.current = null;
       setDeviceInfo(null);
+      setFirmwareState(null);
 
       if (userClosedRef.current) {
         setStatus('disconnected');
@@ -224,6 +225,7 @@ export function useSerial({ autoReconnect, onReading, onEvent }: UseSerialOption
     try { await portRef.current?.close(); } catch { /* noop */ }
     portRef.current = null;
     setDeviceInfo(null);
+      setFirmwareState(null);
     setStatus('disconnected');
     onEventRef.current({ type: 'info', message: 'Disconnected' });
   }, [cleanupStreams]);
