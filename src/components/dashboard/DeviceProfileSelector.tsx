@@ -21,6 +21,8 @@ export default function DeviceProfileSelector({ activeName, onSelect }: DevicePr
     });
   }, [query]);
 
+  const activeDevice = DEVICES.find(d => d.name === activeName) ?? null;
+
   return (
     <div className="rounded-2xl border border-gray-100 bg-white p-5">
       <div className="mb-3 flex items-center justify-between gap-3">
@@ -36,10 +38,38 @@ export default function DeviceProfileSelector({ activeName, onSelect }: DevicePr
         />
       </div>
 
+      {activeDevice && (
+        <div
+          className={[
+            'mb-3 flex items-start gap-2 rounded-lg border px-3 py-2 text-xs',
+            activeDevice.defaultPolarity === 'center-negative'
+              ? 'border-amber-200 bg-amber-50 text-amber-900'
+              : 'border-emerald-200 bg-emerald-50 text-emerald-900',
+          ].join(' ')}
+          role="status"
+        >
+          <span aria-hidden className="mt-0.5">
+            {activeDevice.defaultPolarity === 'center-negative' ? '⚠' : '✓'}
+          </span>
+          <div className="min-w-0">
+            <div className="font-semibold uppercase tracking-wide">
+              Polarity · {activeDevice.polarityLabel.trim()}
+            </div>
+            <div className="opacity-80">
+              {activeDevice.name} expects{' '}
+              <span className="font-mono">{activeDevice.defaultPolarity}</span>.
+              {activeDevice.defaultPolarity === 'center-negative' &&
+                ' Use the inverter cable before powering on.'}
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="max-h-64 overflow-y-auto pr-1">
         <ul className="space-y-1">
           {filtered.map(({ d }) => {
             const isActive = activeName === d.name;
+            const polTag = d.defaultPolarity === 'center-positive' ? 'C+' : 'C−';
             return (
               <li key={d.name}>
                 <button
@@ -63,15 +93,28 @@ export default function DeviceProfileSelector({ activeName, onSelect }: DevicePr
                       <div className="truncate text-xs text-gray-500">{d.brand}</div>
                     )}
                   </div>
-                  <div className="shrink-0 text-right tabular-nums">
-                    <div
-                      className={`text-sm font-medium ${
-                        isActive ? 'text-blue-800' : 'text-gray-900'
-                      }`}
+                  <div className="flex shrink-0 items-center gap-2">
+                    <span
+                      className={[
+                        'rounded px-1.5 py-0.5 text-[10px] font-semibold tabular-nums',
+                        d.defaultPolarity === 'center-negative'
+                          ? 'bg-amber-100 text-amber-800'
+                          : 'bg-emerald-100 text-emerald-800',
+                      ].join(' ')}
+                      title={d.polarityLabel.trim()}
                     >
-                      {d.voltage.toFixed(1)} V
+                      {polTag}
+                    </span>
+                    <div className="text-right tabular-nums">
+                      <div
+                        className={`text-sm font-medium ${
+                          isActive ? 'text-blue-800' : 'text-gray-900'
+                        }`}
+                      >
+                        {d.voltage.toFixed(1)} V
+                      </div>
+                      <div className="text-xs text-gray-500">{d.current.toFixed(1)} A</div>
                     </div>
-                    <div className="text-xs text-gray-500">{d.current.toFixed(1)} A</div>
                   </div>
                 </button>
               </li>
