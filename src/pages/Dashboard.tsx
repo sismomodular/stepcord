@@ -10,11 +10,11 @@ import OledPreview from '../components/dashboard/OledPreview';
 import EventLog, { LogEvent } from '../components/dashboard/EventLog';
 
 import { useTelemetry } from '../hooks/useTelemetry';
+import { useSerial } from '../hooks/useSerial';
 import {
-  ConnectionStatus,
-  DeviceInfo,
   PDO,
   PPSConfig,
+  TelemetryReading,
 } from '../types/picopd';
 
 const PDOS: PDO[] = [
@@ -25,16 +25,10 @@ const PDOS: PDO[] = [
   { index: 4, voltage: 0,  current: 0,    type: 'pps', minVoltage: 3.3, maxVoltage: 21 },
 ];
 
-const DEFAULT_DEVICE: DeviceInfo = { name: 'GaN 65W', port: 'COM4', pdVersion: 'PD3.1' };
-
 const SEED_EVENTS: LogEvent[] = (() => {
   const now = Date.now();
   const seed: Array<Omit<LogEvent, 'timestamp'>> = [
-    { type: 'success', message: 'Connected · GaN 65W' },
-    { type: 'info',    message: 'PDO list received · 5 entries' },
-    { type: 'success', message: 'PDO 4 accepted · 20V/3.25A' },
-    { type: 'info',    message: 'Polling at 250 ms' },
-    { type: 'warning', message: 'Current spike 3.1 A' },
+    { type: 'info', message: 'Awaiting hardware connection…' },
   ];
   return seed.map((e, i) => ({
     ...e,
@@ -42,37 +36,42 @@ const SEED_EVENTS: LogEvent[] = (() => {
   }));
 })();
 
+const HISTORY_LIMIT = 60;
+
 export default function Dashboard() {
   const navigate = useNavigate();
-  const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('connected');
-  const [deviceInfo, setDeviceInfo] = useState<DeviceInfo | null>(DEFAULT_DEVICE);
   const [activePdoIndex, setActivePdoIndex] = useState<number>(3);
   const [ppsConfig, setPpsConfig] = useState<PPSConfig>({ targetVoltage: 12.0, currentLimit: 2.0 });
   const [events, setEvents] = useState<LogEvent[]>(SEED_EVENTS);
 
-  const telemetry = useTelemetry(connectionStatus === 'connected', 250);
+  // Real serial readings populate these when hardware is connected
+  const [serialReading, setSerialReading] = useState<TelemetryReading | null>(null);
+  const [serialHistory, setSerialHistory] = useState<TelemetryReading[]>([]);
+
+  const pushEvent = useCallback((ev: Omit<LogEvent, 'timestamp'>) => {
+    setEvents(prev => [...prev.slice(-199), { ...ev, timestamp: Date.now() }]);
+  }, []);
+
+  const handleReading = useCallback((r: TelemetryReading) => {
+    setSerialReading(r);
+    setSerialHistory(prev => [...prev.slice(-(HISTORY_LIMIT - 1)), r]);
+  }, []);
+
+  const serial = useSerial({
+    autoReconnect: true,
+    onReading: handleReading,
+    onEvent: pushEvent,
+  });
+
+  // Fallback simulated telemetry — runs only when not connected to real hardware
+  const simulated = useTelemetry(serial.status !== 'connected', 250);
+
+  const isLive = serial.status === 'connected' && serialReading !== null;
+  const reading = isLive ? serialReading! : simulated.current;
+  const history = isLive ? serialHistory : simulated.history;
 
   const activePdo = PDOS.find(p => p.index === activePdoIndex) ?? null;
   const activePdoType = activePdo?.type;
-
-  const pushEvent = useCallback((ev: Omit<LogEvent, 'timestamp'>) => {
-    setEvents(prev => [...prev, { ...ev, timestamp: Date.now() }]);
-  }, []);
-
-  const handleConnect = useCallback(() => {
-    setConnectionStatus('connecting');
-    setTimeout(() => {
-      setConnectionStatus('connected');
-      setDeviceInfo(DEFAULT_DEVICE);
-      pushEvent({ type: 'success', message: 'Connected · GaN 65W' });
-    }, 400);
-  }, [pushEvent]);
-
-  const handleDisconnect = useCallback(() => {
-    setConnectionStatus('disconnected');
-    setDeviceInfo(null);
-    pushEvent({ type: 'info', message: 'Disconnected' });
-  }, [pushEvent]);
 
   const handleSelectPdo = useCallback((pdo: PDO) => {
     setActivePdoIndex(pdo.index);
@@ -84,21 +83,31 @@ export default function Dashboard() {
         message: `PDO ${pdo.index} selected · ${pdo.voltage}V/${pdo.current}A`,
       });
     }
-  }, [pushEvent]);
+    // Best-effort forward to firmware
+    void serial.sendCommand(
+      JSON.stringify({ cmd: 'pdo', index: pdo.index, type: pdo.type })
+    );
+  }, [pushEvent, serial]);
 
   return (
     <div className="min-h-screen bg-gray-50">
       <ConnectionBar
-        status={connectionStatus}
-        deviceInfo={deviceInfo}
-        onConnect={handleConnect}
-        onDisconnect={handleDisconnect}
+        status={serial.status}
+        deviceInfo={serial.deviceInfo}
+        onConnect={() => void serial.connect()}
+        onDisconnect={() => void serial.disconnect()}
       />
+
+      {!serial.supported && (
+        <div className="border-b border-amber-100 bg-amber-50 px-4 py-2 text-sm text-amber-800">
+          WebSerial is not supported in this browser. Use Chrome or Edge on desktop.
+        </div>
+      )}
 
       <main className="mx-auto max-w-5xl space-y-4 p-6">
         <TelemetryCards
-          reading={telemetry.current}
-          history={telemetry.history}
+          reading={reading}
+          history={history}
           precision={2}
         />
 
@@ -117,9 +126,9 @@ export default function Dashboard() {
 
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <OledPreview
-            reading={telemetry.current}
+            reading={reading}
             activePdo={activePdo}
-            deviceInfo={deviceInfo}
+            deviceInfo={serial.deviceInfo}
           />
           <EventLog events={events} />
         </div>
