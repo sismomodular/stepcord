@@ -55,20 +55,20 @@ export default function OledPreview({ firmwareState, deviceInfo }: OledPreviewPr
               – – –
             </div>
           ) : simpleMode ? (
-            // ===== Simple display mode (firmware: logisoso24 voltage + 6x10 name) =====
+            // ===== Simple display mode — profile name prominent, voltage secondary =====
             <div className="flex h-full flex-col justify-center pl-2">
               <div
-                className="tabular-nums leading-none"
-                style={{ fontSize: 44, fontWeight: 700 }}
-              >
-                {voltage.toFixed(1)}
-                <span style={{ fontSize: 24, marginLeft: 6 }}>V</span>
-              </div>
-              <div
-                className="mt-3 truncate"
-                style={{ fontSize: 12, color: '#cfcfcf' }}
+                className="truncate"
+                style={{ fontSize: 18, fontWeight: 600, color: '#ffffff' }}
               >
                 {name}
+              </div>
+              <div
+                className="mt-2 tabular-nums leading-none"
+                style={{ fontSize: 28, fontWeight: 700, color: '#cfcfcf' }}
+              >
+                {voltage.toFixed(1)}
+                <span style={{ fontSize: 16, marginLeft: 4 }}>V</span>
               </div>
             </div>
           ) : (
