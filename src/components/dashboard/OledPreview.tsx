@@ -15,7 +15,7 @@ export default function OledPreview({ reading, activePdo, deviceInfo }: OledPrev
   const pdoLine = connected && activePdo
     ? activePdo.type === 'pps'
       ? `PDO ${activePdo.index} · PPS`
-      : `PDO ${activePdo.index} · ${activePdo.voltage}V/${activePdo.current}A`
+      : `PDO ${activePdo.index} · ${activePdo.voltage.toFixed(2)}V/${activePdo.current.toFixed(2)}A`
     : '– – –';
 
   const devLine = connected && deviceInfo
