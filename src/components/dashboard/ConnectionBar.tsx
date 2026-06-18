@@ -34,7 +34,7 @@ export default function ConnectionBar({ status, deviceInfo, onConnect, onDisconn
         ].join(' ')}
       >
         <img src={myVoltsLogo} alt="MyVolts" className="h-7 w-auto" />
-        <span className="text-base font-medium text-gray-900">PicoPD Control</span>
+        <span className="text-base font-medium text-gray-900">StepCord Control</span>
         {!isConnected && !isConnecting && (
           <span className="ml-1 hidden text-xs text-gray-400 sm:inline">
             click to connect
