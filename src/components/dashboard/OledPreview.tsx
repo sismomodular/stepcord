@@ -1,39 +1,34 @@
-import { PDO, TelemetryReading, DeviceInfo } from '../../types/picopd';
+import { DeviceInfo } from '../../types/picopd';
+import type { FirmwareState } from '../../hooks/useSerial';
 
 interface OledPreviewProps {
-  reading: TelemetryReading;
-  activePdo: PDO | null;
+  firmwareState: FirmwareState | null;
   deviceInfo: DeviceInfo | null;
 }
 
-export default function OledPreview({ reading, activePdo, deviceInfo }: OledPreviewProps) {
-  const connected = !!deviceInfo;
+/**
+ * OLED preview — 1:1 mirror of what the firmware renders on the SH1106 128×64.
+ *
+ * Two modes (matching firmware atualizarDisplay()):
+ *  - simpleDisplayMode (auto after 5s LIVE): big voltage + device name
+ *  - normal: header line, "Device: <name>", big voltage, footer (LIVE/LIMIT)
+ *
+ * Web preview uses simple mode whenever state === 3 (LIVE) to match the
+ * firmware's auto-switch behaviour after 5s of inactivity.
+ */
+export default function OledPreview({ firmwareState, deviceInfo }: OledPreviewProps) {
+  const connected = !!deviceInfo && !!firmwareState;
 
-  const fmt = (n: number, w = 5, d = 2) =>
-    connected ? n.toFixed(d).padStart(w, ' ') : '– – –';
+  const state = firmwareState?.state ?? 0;
+  const voltage = firmwareState?.targetVoltage ?? 0;
+  const current = firmwareState?.targetCurrent ?? 0;
+  const power = voltage * current;
+  const name = firmwareState?.name ?? 'MANUAL CONTROL';
+  const isWebMode = firmwareState?.isWebMode ?? false;
+  const isLive = state === 3;
 
-  const pdoLine = connected && activePdo
-    ? activePdo.type === 'pps'
-      ? `PDO ${activePdo.index} · PPS`
-      : `PDO ${activePdo.index} · ${activePdo.voltage.toFixed(2)}V/${activePdo.current.toFixed(2)}A`
-    : '– – –';
-
-  const devLine = connected && deviceInfo
-    ? `${deviceInfo.name} · ${deviceInfo.pdVersion}`
-    : '– – –';
-
-  const Row = ({ label, value, unit }: { label: string; value: string; unit: string }) => (
-    <div className="flex items-center">
-      <span style={{ color: '#e8e8e8' }} className="w-6">{label}</span>
-      <span
-        style={{ color: '#ffffff' }}
-        className="w-12 inline-block text-right font-medium tabular-nums"
-      >
-        {value}
-      </span>
-      <span style={{ color: '#666666' }} className="ml-2">{unit}</span>
-    </div>
-  );
+  // Match firmware: simple mode kicks in when LIVE
+  const simpleMode = connected && isLive;
 
   return (
     <div>
@@ -41,18 +36,99 @@ export default function OledPreview({ reading, activePdo, deviceInfo }: OledPrev
         OLED preview
       </div>
       <div className="rounded-2xl border border-gray-100 bg-white p-5">
+        {/* SH1106 128×64 — render at 2× scale (256×128) for clarity */}
         <div
-          className="rounded-lg p-3 font-mono text-sm leading-6"
+          className="mx-auto rounded-lg p-3 font-mono"
           style={{
+            width: 280,
+            height: 152,
             backgroundColor: '#0a0a0a',
             boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.06)',
+            color: '#ffffff',
           }}
         >
-          <Row label="V:" value={fmt(reading.voltage)} unit="V" />
-          <Row label="I:" value={fmt(reading.current)} unit="A" />
-          <Row label="P:" value={fmt(reading.power)} unit="W" />
-          <div className="mt-2 text-xs" style={{ color: '#aaaaaa' }}>{pdoLine}</div>
-          <div className="text-xs" style={{ color: '#aaaaaa' }}>{devLine}</div>
+          {!connected ? (
+            <div
+              className="flex h-full items-center justify-center text-sm"
+              style={{ color: '#666' }}
+            >
+              – – –
+            </div>
+          ) : simpleMode ? (
+            // ===== Simple display mode (firmware: logisoso24 voltage + 6x10 name) =====
+            <div className="flex h-full flex-col justify-center pl-2">
+              <div
+                className="tabular-nums leading-none"
+                style={{ fontSize: 44, fontWeight: 700 }}
+              >
+                {voltage.toFixed(1)}
+                <span style={{ fontSize: 24, marginLeft: 6 }}>V</span>
+              </div>
+              <div
+                className="mt-3 truncate"
+                style={{ fontSize: 12, color: '#cfcfcf' }}
+              >
+                {name}
+              </div>
+            </div>
+          ) : (
+            // ===== Normal display mode =====
+            <div className="flex h-full flex-col">
+              {/* Header: [ WEB PROFILE LOCKED ] or [ MANUAL CONTROL ] */}
+              <div style={{ fontSize: 11, color: '#e8e8e8' }}>
+                {isWebMode ? '[ WEB PROFILE LOCKED ]' : '[ MANUAL CONTROL ]'}
+              </div>
+              <div
+                className="my-1"
+                style={{ height: 1, backgroundColor: '#ffffff', opacity: 0.6 }}
+              />
+
+              {/* Device: <name> */}
+              <div
+                className="truncate"
+                style={{ fontSize: 11, color: '#e8e8e8' }}
+              >
+                Device:{' '}
+                <span style={{ color: '#ffffff' }}>{name}</span>
+              </div>
+
+              {/* Big voltage (logisoso16) */}
+              <div
+                className="mt-1 tabular-nums leading-none"
+                style={{ fontSize: 28, fontWeight: 700 }}
+              >
+                {voltage.toFixed(1)}
+                <span style={{ fontSize: 16, marginLeft: 4 }}>V</span>
+              </div>
+
+              {/* Footer: LIVE (xA) xW   or   LIMIT: xA */}
+              <div
+                className="mt-auto tabular-nums"
+                style={{ fontSize: 11 }}
+              >
+                {isLive ? (
+                  <span style={{ color: '#7CFFB2' }}>
+                    ! LIVE ({current.toFixed(1)}A) {power.toFixed(1)}W
+                  </span>
+                ) : (
+                  <span style={{ color: '#FFD479' }}>
+                    . LIMIT: {current.toFixed(1)} A
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Sub-caption */}
+        <div className="mt-2 text-center text-xs text-gray-400">
+          {connected
+            ? simpleMode
+              ? 'Macro view · LIVE'
+              : isWebMode
+                ? 'Web profile locked'
+                : 'Manual control'
+            : 'Awaiting hardware'}
         </div>
       </div>
     </div>
