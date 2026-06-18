@@ -2,6 +2,21 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { ConnectionStatus, DeviceInfo, TelemetryReading } from '../types/picopd';
 import type { LogEvent } from '../components/dashboard/EventLog';
 
+export interface FirmwareState {
+  /** 0 = STANDBY (output off), 3 = LIVE (output on) */
+  state: 0 | 3;
+  /** Target voltage from firmware echo (V) */
+  targetVoltage: number;
+  /** Target current limit from firmware echo (A) */
+  targetCurrent: number;
+  /** Active device profile name (e.g. "MANUAL CONTROL", "Web Profile", or device name) */
+  name: string;
+  /** True when name is a web-loaded profile (not MANUAL CONTROL / MANUAL VOLTAGE) */
+  isWebMode: boolean;
+  /** Timestamp of last echo */
+  timestamp: number;
+}
+
 interface UseSerialOptions {
   autoReconnect: boolean;
   onReading: (r: TelemetryReading) => void;
@@ -12,6 +27,7 @@ interface UseSerialResult {
   supported: boolean;
   status: ConnectionStatus;
   deviceInfo: DeviceInfo | null;
+  firmwareState: FirmwareState | null;
   connect: () => Promise<void>;
   disconnect: () => Promise<void>;
   sendCommand: (cmd: string) => Promise<void>;
@@ -30,6 +46,7 @@ export function useSerial({ autoReconnect, onReading, onEvent }: UseSerialOption
 
   const [status, setStatus] = useState<ConnectionStatus>('disconnected');
   const [deviceInfo, setDeviceInfo] = useState<DeviceInfo | null>(null);
+  const [firmwareState, setFirmwareState] = useState<FirmwareState | null>(null);
 
   const portRef = useRef<SerialPortLike | null>(null);
   const readerRef = useRef<ReadableStreamDefaultReader<string> | null>(null);
@@ -94,10 +111,22 @@ export function useSerial({ autoReconnect, onReading, onEvent }: UseSerialOption
             const i = parseFloat(parts[2]);
             const name = parts.slice(3).join(',').trim();
             if (Number.isFinite(v) && Number.isFinite(i)) {
-              // When output is off (state 0), report zeros for current/power
-              // but keep configured target voltage so UI reflects setpoint.
-              const liveV = state === 3 ? v : 0;
-              const liveI = state === 3 ? i : 0;
+              const fwState: 0 | 3 = state === 3 ? 3 : 0;
+              const isWebMode =
+                name.length > 0 && name !== 'MANUAL CONTROL' && name !== 'MANUAL VOLTAGE';
+
+              setFirmwareState({
+                state: fwState,
+                targetVoltage: v,
+                targetCurrent: i,
+                name: name || 'MANUAL CONTROL',
+                isWebMode,
+                timestamp: Date.now(),
+              });
+
+              // Telemetry: when output is off, report zeros for current/power.
+              const liveV = fwState === 3 ? v : 0;
+              const liveI = fwState === 3 ? i : 0;
               const reading: TelemetryReading = {
                 voltage: liveV,
                 current: liveI,
@@ -106,8 +135,8 @@ export function useSerial({ autoReconnect, onReading, onEvent }: UseSerialOption
               };
               onReadingRef.current(reading);
               onEventRef.current({
-                type: state === 3 ? 'success' : 'info',
-                message: state === 3
+                type: fwState === 3 ? 'success' : 'info',
+                message: fwState === 3
                   ? `LIVE · ${v.toFixed(1)}V / ${i.toFixed(1)}A${name ? ` · ${name}` : ''}`
                   : `STANDBY${name ? ` · ${name}` : ''}`,
               });
@@ -149,6 +178,7 @@ export function useSerial({ autoReconnect, onReading, onEvent }: UseSerialOption
       try { await port.close(); } catch { /* noop */ }
       portRef.current = null;
       setDeviceInfo(null);
+      setFirmwareState(null);
 
       if (userClosedRef.current) {
         setStatus('disconnected');
@@ -195,6 +225,7 @@ export function useSerial({ autoReconnect, onReading, onEvent }: UseSerialOption
     try { await portRef.current?.close(); } catch { /* noop */ }
     portRef.current = null;
     setDeviceInfo(null);
+    setFirmwareState(null);
     setStatus('disconnected');
     onEventRef.current({ type: 'info', message: 'Disconnected' });
   }, [cleanupStreams]);
@@ -216,5 +247,5 @@ export function useSerial({ autoReconnect, onReading, onEvent }: UseSerialOption
     };
   }, [cleanupStreams]);
 
-  return { supported, status, deviceInfo, connect, disconnect, sendCommand };
+  return { supported, status, deviceInfo, firmwareState, connect, disconnect, sendCommand };
 }
