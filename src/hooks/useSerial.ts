@@ -21,6 +21,7 @@ interface UseSerialOptions {
   autoReconnect: boolean;
   onReading: (r: TelemetryReading) => void;
   onEvent: (e: Omit<LogEvent, 'timestamp'>) => void;
+  onEncoder?: (dir: 'CW' | 'CCW') => void;
 }
 
 interface UseSerialResult {
