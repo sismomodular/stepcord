@@ -59,8 +59,10 @@ export function useSerial({ autoReconnect, onReading, onEvent, onEncoder }: UseS
   // Keep latest callbacks without re-binding the read loop
   const onReadingRef = useRef(onReading);
   const onEventRef = useRef(onEvent);
+  const onEncoderRef = useRef(onEncoder);
   useEffect(() => { onReadingRef.current = onReading; }, [onReading]);
   useEffect(() => { onEventRef.current = onEvent; }, [onEvent]);
+  useEffect(() => { onEncoderRef.current = onEncoder; }, [onEncoder]);
 
   const cleanupStreams = useCallback(async () => {
     try { await readerRef.current?.cancel(); } catch { /* noop */ }
