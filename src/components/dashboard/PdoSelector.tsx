@@ -22,13 +22,13 @@ export default function PdoSelector({
   const fixed = pdos.filter(p => p.type === 'fixed');
   const pps = pdos.find(p => p.type === 'pps');
 
-  const baseBtn = 'rounded-lg p-3 text-left transition-colors';
-  const activeCls = 'border-2 border-blue-500 bg-blue-50';
-  const inactiveCls = 'border border-gray-200 bg-gray-50 hover:border-gray-300';
+  const baseBtn = 'rounded-lg p-3 text-left transition-colors duration-150';
+  const activeCls = 'border border-blue-400 bg-blue-50 text-blue-800';
+  const inactiveCls = 'border border-gray-200 bg-gray-50 hover:bg-gray-100';
 
   return (
-    <div className="rounded-xl bg-white p-4">
-      <div className="mb-3 text-xs font-semibold uppercase tracking-wider text-gray-500">
+    <div className="rounded-2xl border border-gray-100 bg-white p-5">
+      <div className="mb-3 text-xs font-medium uppercase tracking-widest text-gray-400">
         PDO selector
       </div>
 
@@ -42,25 +42,32 @@ export default function PdoSelector({
               onClick={() => onSelectPdo(pdo)}
               className={`${baseBtn} ${isActive ? activeCls : inactiveCls}`}
             >
-              <div className="text-lg font-bold text-gray-900">{pdo.voltage} V</div>
-              <div className="mt-0.5 text-xs text-gray-500">
+              <div className={`text-lg font-bold ${isActive ? 'text-blue-800' : 'text-gray-900'}`}>
+                {pdo.voltage} V
+              </div>
+              <div className={`mt-0.5 text-xs ${isActive ? 'text-blue-600' : 'text-gray-500'}`}>
                 {pdo.current} A · {watts} W
               </div>
             </button>
           );
         })}
 
-        {pps && (
-          <button
-            onClick={() => onSelectPdo(pps)}
-            className={`${baseBtn} col-span-2 ${pps.index === activePdoIndex ? activeCls : inactiveCls}`}
-          >
-            <div className="text-lg font-bold text-gray-900">PPS mode</div>
-            <div className="mt-0.5 text-xs text-gray-500">
-              {pps.minVoltage} – {pps.maxVoltage} V programmable
-            </div>
-          </button>
-        )}
+        {pps && (() => {
+          const isActive = pps.index === activePdoIndex;
+          return (
+            <button
+              onClick={() => onSelectPdo(pps)}
+              className={`${baseBtn} col-span-2 ${isActive ? activeCls : inactiveCls}`}
+            >
+              <div className={`text-lg font-bold ${isActive ? 'text-blue-800' : 'text-gray-900'}`}>
+                PPS mode
+              </div>
+              <div className={`mt-0.5 text-xs ${isActive ? 'text-blue-600' : 'text-gray-500'}`}>
+                {pps.minVoltage} – {pps.maxVoltage} V programmable
+              </div>
+            </button>
+          );
+        })()}
       </div>
     </div>
   );

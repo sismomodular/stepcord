@@ -23,6 +23,21 @@ const METRICS: Metric[] = [
 ];
 
 function Sparkline({ values }: { values: number[] }) {
+  // Loading skeleton when not enough samples yet
+  if (values.length < 3) {
+    return (
+      <div className="mt-3 flex h-7 items-end gap-[2px]">
+        {Array.from({ length: 12 }).map((_, i) => (
+          <div
+            key={i}
+            className="w-[6px] rounded-sm bg-gray-100 animate-pulse"
+            style={{ height: `${6 + ((i * 7) % 18)}px` }}
+          />
+        ))}
+      </div>
+    );
+  }
+
   const bars = values.slice(-12);
   while (bars.length < 12) bars.unshift(0);
 
@@ -51,21 +66,21 @@ function Sparkline({ values }: { values: number[] }) {
 
 export default function TelemetryCards({ reading, history, precision = 2 }: TelemetryCardsProps) {
   return (
-    <div className="grid grid-cols-3 gap-3">
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
       {METRICS.map(({ key, label, unit, icon: Icon }) => {
         const value = reading[key];
         const series = history.map(h => h[key]);
         return (
-          <div key={key} className="rounded-xl bg-gray-50 p-4">
-            <div className="flex items-center gap-1.5 text-xs font-medium text-gray-500">
+          <div key={key} className="rounded-2xl border border-gray-100 bg-white p-5">
+            <div className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-widest text-gray-400">
               <Icon className="h-3.5 w-3.5" />
               <span>{label}</span>
             </div>
-            <div className="mt-2 flex items-baseline gap-1">
-              <span className="text-3xl font-semibold tabular-nums text-gray-900">
+            <div className="mt-2 flex items-baseline">
+              <span className="text-3xl font-medium tabular-nums text-gray-900">
                 {value.toFixed(precision)}
               </span>
-              <span className="text-sm font-medium text-gray-500">{unit}</span>
+              <span className="ml-1 text-base text-gray-400">{unit}</span>
             </div>
             <Sparkline values={series} />
           </div>
