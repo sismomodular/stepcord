@@ -11,8 +11,8 @@ export default function PpsControl({ config, onChange, isActive }: PpsControlPro
   const setCurrent = (a: number) => onChange({ ...config, currentLimit: a });
 
   return (
-    <div className="rounded-xl bg-white p-4">
-      <div className="mb-3 text-xs font-semibold uppercase tracking-wider text-gray-500">
+    <div className="rounded-2xl border border-gray-100 bg-white p-5">
+      <div className="mb-3 text-xs font-medium uppercase tracking-widest text-gray-400">
         PPS control
       </div>
 
