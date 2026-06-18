@@ -42,7 +42,7 @@ type SerialPortLike = {
   getInfo?: () => { usbVendorId?: number; usbProductId?: number };
 };
 
-export function useSerial({ autoReconnect, onReading, onEvent }: UseSerialOptions): UseSerialResult {
+export function useSerial({ autoReconnect, onReading, onEvent, onEncoder }: UseSerialOptions): UseSerialResult {
   const supported = typeof navigator !== 'undefined' && 'serial' in navigator;
 
   const [status, setStatus] = useState<ConnectionStatus>('disconnected');
