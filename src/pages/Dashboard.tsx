@@ -137,6 +137,7 @@ export default function Dashboard() {
             config={ppsConfig}
             onChange={setPpsConfig}
             isActive={activePdoType === 'pps'}
+            onApply={handleApplyPps}
           />
         </div>
 
