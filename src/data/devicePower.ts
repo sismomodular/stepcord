@@ -128,4 +128,53 @@ export const POWER_DB: PowerSpec[] = [
   { id: "seq-ob-6",             brand: "Sequential", model: "OB-6",             power_voltage: null, power_current_ma: null, power_polarity: "iec_mains",    connector_type: "iec_c14" },
   { id: "seq-take-5",           brand: "Sequential", model: "Take 5",           power_voltage: 12, power_current_ma: 3000, power_polarity: "center_positive", connector_type: "barrel_5.5x2.1" },
   { id: "seq-trigon-6",         brand: "Sequential", model: "Trigon-6",         power_voltage: null, power_current_ma: null, power_polarity: "iec_mains",    connector_type: "iec_c14" },
+
+  // ───────── APPENDED 2026-06-25 ─────────
+  // Korg Volca line + multi/poly
+  { id: "korg-volca-keys-2",    brand: "Korg",      model: "Volca Keys",        power_voltage: 9,  power_current_ma: 1700, power_polarity: "center_positive", connector_type: "barrel_4.0x1.7" },
+  { id: "korg-volca-bass-2",    brand: "Korg",      model: "Volca Bass",        power_voltage: 9,  power_current_ma: 1700, power_polarity: "center_positive", connector_type: "barrel_4.0x1.7" },
+  { id: "korg-volca-beats-2",   brand: "Korg",      model: "Volca Beats",       power_voltage: 9,  power_current_ma: 1700, power_polarity: "center_positive", connector_type: "barrel_4.0x1.7" },
+  { id: "korg-volca-sample-2b", brand: "Korg",      model: "Volca Sample 2",    power_voltage: 9,  power_current_ma: 1700, power_polarity: "center_positive", connector_type: "barrel_4.0x1.7" },
+  { id: "korg-volca-fm2",       brand: "Korg",      model: "Volca FM2",         power_voltage: 9,  power_current_ma: 1700, power_polarity: "center_positive", connector_type: "barrel_4.0x1.7" },
+  { id: "korg-volca-drum",      brand: "Korg",      model: "Volca Drum",        power_voltage: 9,  power_current_ma: 1700, power_polarity: "center_positive", connector_type: "barrel_4.0x1.7" },
+  { id: "korg-multipoly",       brand: "Korg",      model: "multi/poly",        power_voltage: 12, power_current_ma: 2000, power_polarity: "center_positive", connector_type: "barrel_5.5x2.1" },
+
+  // Roland AIRA Compact individual units
+  { id: "roland-aira-t-8",      brand: "Roland",    model: "AIRA Compact T-8",  power_voltage: 5,  power_current_ma: 1000, power_polarity: "usb_c_pd",        connector_type: "usb_c" },
+  { id: "roland-aira-j-6",      brand: "Roland",    model: "AIRA Compact J-6",  power_voltage: 5,  power_current_ma: 1000, power_polarity: "usb_c_pd",        connector_type: "usb_c" },
+  { id: "roland-aira-p-6",      brand: "Roland",    model: "AIRA Compact P-6",  power_voltage: 5,  power_current_ma: 1000, power_polarity: "usb_c_pd",        connector_type: "usb_c" },
+  { id: "roland-aira-e-4",      brand: "Roland",    model: "AIRA Compact E-4",  power_voltage: 5,  power_current_ma: 1000, power_polarity: "usb_c_pd",        connector_type: "usb_c" },
+
+  // Behringer additions
+  { id: "beh-ub-xa-d",          brand: "Behringer", model: "UB-Xa D",           power_voltage: 12, power_current_ma: 2000, power_polarity: "center_positive", connector_type: "barrel_5.5x2.1" },
+  { id: "beh-syncussion-sy-1",  brand: "Behringer", model: "Syncussion SY-1",   power_voltage: 9,  power_current_ma: 500,  power_polarity: "center_positive", connector_type: "barrel_5.5x2.1" },
+  { id: "beh-kobol-expander",   brand: "Behringer", model: "Kobol Expander",    power_voltage: 12, power_current_ma: 1000, power_polarity: "center_positive", connector_type: "barrel_5.5x2.1" },
+
+  // Arturia
+  { id: "art-astrolab-37",      brand: "Arturia",   model: "AstroLab 37",       power_voltage: 12, power_current_ma: 2000, power_polarity: "center_positive", connector_type: "barrel_5.5x2.1" },
+
+  // Novation
+  { id: "nov-mininova",         brand: "Novation",  model: "MiniNova",          power_voltage: 12, power_current_ma: 2000, power_polarity: "center_positive", connector_type: "barrel_5.5x2.1" },
+
+  // Native Instruments
+  { id: "ni-maschine-mikro-mk3", brand: "Native Instruments", model: "Maschine Mikro MK3", power_voltage: 5, power_current_ma: 1000, power_polarity: "usb_c_pd", connector_type: "usb_c" },
+
+  // Akai
+  { id: "akai-mpc-key-37-g2",   brand: "Akai",      model: "MPC Key 37 G2",     power_voltage: 12, power_current_ma: 3000, power_polarity: "center_positive", connector_type: "barrel_5.5x2.1" },
+  { id: "akai-mpc-key-37",      brand: "Akai",      model: "MPC Key 37",        power_voltage: 12, power_current_ma: 3000, power_polarity: "center_positive", connector_type: "barrel_5.5x2.1" },
+  { id: "akai-mpc-one-plus",    brand: "Akai",      model: "MPC One+",          power_voltage: 12, power_current_ma: 2000, power_polarity: "center_positive", connector_type: "barrel_5.5x2.1" },
+  { id: "akai-mpc-live-ii",     brand: "Akai",      model: "MPC Live II",       power_voltage: 12, power_current_ma: 3000, power_polarity: "center_positive", connector_type: "barrel_5.5x2.1" },
+  { id: "akai-mpc-sample",      brand: "Akai",      model: "MPC Sample",        power_voltage: 5,  power_current_ma: 1000, power_polarity: "usb_c_pd",        connector_type: "usb_c" },
+
+  // Waldorf
+  { id: "wal-blofeld",          brand: "Waldorf",   model: "Blofeld",           power_voltage: 12, power_current_ma: 1000, power_polarity: "center_positive", connector_type: "barrel_5.5x2.1" },
+  { id: "wal-protein",          brand: "Waldorf",   model: "Protein",           power_voltage: 12, power_current_ma: 1000, power_polarity: "center_positive", connector_type: "barrel_5.5x2.1" },
+
+  // Polyend
+  { id: "pol-play-plus",        brand: "Polyend",   model: "Play+",             power_voltage: 9,  power_current_ma: 2000, power_polarity: "center_positive", connector_type: "barrel_5.5x2.1" },
+  { id: "pol-tracker-plus",     brand: "Polyend",   model: "Tracker+",          power_voltage: 9,  power_current_ma: 1000, power_polarity: "center_positive", connector_type: "barrel_5.5x2.1" },
+  { id: "pol-endless",          brand: "Polyend",   model: "Endless",           power_voltage: 5,  power_current_ma: 500,  power_polarity: "usb_c_pd",        connector_type: "usb_c" },
+
+  // Ableton
+  { id: "abl-move",             brand: "Ableton",   model: "Move",              power_voltage: 5,  power_current_ma: 2000, power_polarity: "usb_c_pd",        connector_type: "usb_c" },
 ];
