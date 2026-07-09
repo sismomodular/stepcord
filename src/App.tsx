@@ -7,6 +7,8 @@ import Dashboard from "./pages/Dashboard.tsx";
 import Companion from "./pages/Companion.tsx";
 import Settings from "./pages/Settings.tsx";
 import DataHealth from "./pages/DataHealth.tsx";
+import Login from "./pages/Login.tsx";
+import OAuthConsent from "./pages/OAuthConsent.tsx";
 import NotFound from "./pages/NotFound.tsx";
 
 const queryClient = new QueryClient();
@@ -23,6 +25,8 @@ const App = () => (
           <Route path="/companion" element={<Companion />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="/data-health" element={<DataHealth />} />
+          <Route path="/login" element={<Login />} />
+          <Route path="/.lovable/oauth/consent" element={<OAuthConsent />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>

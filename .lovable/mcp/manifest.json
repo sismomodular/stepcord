@@ -1,0 +1,114 @@
+{
+  "version": 1,
+  "sdk_version": "0.20.0",
+  "path": "/functions/v1/mcp",
+  "auth": {
+    "type": "oauth",
+    "issuer": "https://tvihdgxtoubmeqmvymyk.supabase.co/auth/v1",
+    "accepted_audiences": [
+      "authenticated"
+    ]
+  },
+  "mcp": {
+    "server": {
+      "name": "stepcord-mcp",
+      "version": "0.1.0",
+      "title": "Stepcord MCP"
+    },
+    "tools": [
+      {
+        "name": "search_devices",
+        "title": "Search device catalog",
+        "description": "Search the Stepcord catalog of synthesizers, drum machines, samplers, grooveboxes and modular gear by brand, model, category, type or tag.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "type": "object",
+          "properties": {
+            "query": {
+              "description": "Free-text search over brand, model and tags.",
+              "type": "string"
+            },
+            "brand": {
+              "description": "Filter by brand, e.g. 'Korg'.",
+              "type": "string"
+            },
+            "category": {
+              "type": "string",
+              "enum": [
+                "synthesizer",
+                "drum_machine",
+                "sampler",
+                "groovebox",
+                "sequencer",
+                "modular",
+                "workstation"
+              ]
+            },
+            "limit": {
+              "description": "Max results (default 25).",
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            }
+          }
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "get_device",
+        "title": "Get device details",
+        "description": "Return full catalog details for a device by its Stepcord catalog id (e.g. 'korg-minilogue-xd').",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Catalog device id."
+            }
+          },
+          "required": [
+            "id"
+          ]
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "get_power_spec",
+        "title": "Get device power spec",
+        "description": "Return the audited DC power spec (voltage, current, polarity, connector) for a device. Data used by Stepcord's safety guard — never power hardware from unaudited values.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "type": "object",
+          "properties": {
+            "query": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Device id, or 'Brand Model' text (e.g. 'Moog Mother-32')."
+            }
+          },
+          "required": [
+            "query"
+          ]
+        },
+        "outputSchema": null
+      }
+    ]
+  }
+}
