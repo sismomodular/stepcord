@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState, useEffect } from 'react';
+import { useCallback, useRef, useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Settings, Bookmark, Download } from 'lucide-react';
 
@@ -96,12 +96,19 @@ export default function Dashboard() {
   const activePdo = PDOS.find(p => p.index === activePdoIndex) ?? null;
   const activePdoType = activePdo?.type;
 
+  // Optimistic firmware state — reflects what the web UI has requested,
+  // so the OLED preview shows PPS / profile selections even without hardware.
+  const [optimisticState, setOptimisticState] = useState<{
+    state: 0 | 3; voltage: number; current: number; name: string;
+  } | null>(null);
+
   // Firmware protocol: "state,voltage,current,name\n"
   // state: 0 = STANDBY (output off), 3 = LIVE (output on)
   const sendProfile = useCallback(
     (state: 0 | 3, voltage: number, current: number, name: string) => {
       const line = `${state},${voltage.toFixed(1)},${current.toFixed(1)},${name}`;
       void serial.sendCommand(line);
+      setOptimisticState({ state, voltage, current, name });
     },
     [serial],
   );
@@ -110,7 +117,7 @@ export default function Dashboard() {
     setActivePdoIndex(pdo.index);
     if (pdo.type === 'pps') {
       pushEvent({ type: 'info', message: `PDO ${pdo.index} selected · PPS mode` });
-      sendProfile(3, ppsConfig.targetVoltage, ppsConfig.currentLimit, 'Web Profile');
+      sendProfile(3, ppsConfig.targetVoltage, ppsConfig.currentLimit, 'PPS');
     } else {
       pushEvent({
         type: 'info',
@@ -121,12 +128,23 @@ export default function Dashboard() {
   }, [pushEvent, sendProfile, ppsConfig]);
 
   const handleApplyPps = useCallback(() => {
-    sendProfile(3, ppsConfig.targetVoltage, ppsConfig.currentLimit, 'Web Profile');
+    sendProfile(3, ppsConfig.targetVoltage, ppsConfig.currentLimit, 'PPS');
     pushEvent({
       type: 'info',
       message: `PPS apply · ${ppsConfig.targetVoltage.toFixed(1)}V / ${ppsConfig.currentLimit.toFixed(1)}A`,
     });
   }, [ppsConfig, sendProfile, pushEvent]);
+
+  // Live PPS: while PPS mode is active, changes to the sliders update the
+  // firmware/OLED immediately — no need to click Apply for each tweak.
+  useEffect(() => {
+    if (activePdoType !== 'pps') return;
+    const t = setTimeout(() => {
+      sendProfile(3, ppsConfig.targetVoltage, ppsConfig.currentLimit, 'PPS');
+    }, 120);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ppsConfig.targetVoltage, ppsConfig.currentLimit, activePdoType]);
 
   const handleSelectProfile = useCallback((device: MusicalDevice) => {
     setActiveProfileName(device.name);
@@ -138,6 +156,29 @@ export default function Dashboard() {
   }, [sendProfile, pushEvent]);
 
   useEffect(() => { handleSelectProfileRef.current = handleSelectProfile; }, [handleSelectProfile]);
+
+  // OLED preview: prefer real firmware echo when connected, else optimistic UI state.
+  const oledState = useMemo(() => {
+    if (serial.firmwareState) return serial.firmwareState;
+    if (!optimisticState) return null;
+    const isWebMode =
+      optimisticState.name.length > 0 &&
+      optimisticState.name !== 'MANUAL CONTROL' &&
+      optimisticState.name !== 'MANUAL VOLTAGE';
+    return {
+      state: optimisticState.state,
+      targetVoltage: optimisticState.voltage,
+      targetCurrent: optimisticState.current,
+      name: optimisticState.name || 'MANUAL CONTROL',
+      isWebMode,
+      timestamp: Date.now(),
+    };
+  }, [serial.firmwareState, optimisticState]);
+
+  const oledDeviceInfo = serial.deviceInfo ?? (optimisticState
+    ? { name: 'Preview', port: 'web', pdVersion: 'PD3.1' }
+    : null);
+
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -182,8 +223,8 @@ export default function Dashboard() {
 
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <OledPreview
-            firmwareState={serial.firmwareState}
-            deviceInfo={serial.deviceInfo}
+            firmwareState={oledState}
+            deviceInfo={oledDeviceInfo}
           />
           <EventLog events={events} />
         </div>

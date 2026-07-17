@@ -17,7 +17,6 @@ const defaultSettings: AppSettings = {
 
 const initialPresets: UserPreset[] = [
   { id: '1', name: 'Raspberry Pi', voltage: 5.0, current: 3.0, isCloud: true },
-  { id: '2', name: 'Laptop', voltage: 20.0, current: 3.25, isCloud: true },
   { id: '3', name: 'LED bench', voltage: 12.0, current: 1.5, isCloud: false },
 ];
 
