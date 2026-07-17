@@ -223,8 +223,8 @@ export default function Dashboard() {
 
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <OledPreview
-            firmwareState={serial.firmwareState}
-            deviceInfo={serial.deviceInfo}
+            firmwareState={oledState}
+            deviceInfo={oledDeviceInfo}
           />
           <EventLog events={events} />
         </div>
