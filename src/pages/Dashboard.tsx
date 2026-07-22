@@ -229,7 +229,17 @@ export default function Dashboard() {
           <EventLog events={events} />
         </div>
 
-        <div className="flex justify-end gap-2">
+        <div className="flex flex-wrap justify-end gap-2">
+          <button
+            onClick={() => {
+              void serial.sendCommand('STOP');
+              setOptimisticState(prev => prev ? { ...prev, state: 0 } : { state: 0, voltage: 0, current: 0, name: 'MANUAL CONTROL' });
+              pushEvent({ type: 'warning', message: 'Output OFF · STOP sent' });
+            }}
+            className="inline-flex items-center gap-1.5 rounded-md border border-red-300 bg-red-50 px-3 py-1.5 text-sm font-medium text-red-700 hover:bg-red-100"
+          >
+            Output Off
+          </button>
           <button
             onClick={() => navigate('/settings')}
             className="inline-flex items-center gap-1.5 rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"

@@ -64,12 +64,20 @@ export default function ConnectionBar({ status, deviceInfo, onConnect, onDisconn
           </span>
         )}
 
-        {isConnected && (
+        {isConnected ? (
           <button
             onClick={onDisconnect}
             className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
           >
             Disconnect
+          </button>
+        ) : (
+          <button
+            onClick={onConnect}
+            disabled={isConnecting}
+            className="rounded-md border border-gray-900 bg-gray-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-60"
+          >
+            {isConnecting ? 'Connecting…' : 'Connect USB'}
           </button>
         )}
       </div>
