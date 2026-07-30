@@ -113,26 +113,52 @@ Deno.serve(async (req) => {
         const sourceId = toStr(pick(r, ['id', 'device_id', 'uuid', 'slug']));
         const name = toStr(pick(r, ['name', 'model', 'device_name', 'title']));
         if (!sourceId || !name) return null;
+
+        const voltage = toNum(pick(r, ['voltage', 'volts', 'v', 'power_voltage']));
+
+        // RigPower stores current in milliamps (current_ma).
+        const currentA = toNum(pick(r, ['current', 'amps', 'a', 'current_a']));
+        const currentMa = toNum(pick(r, ['current_ma', 'currentMa', 'ma']));
+        const current = currentA ?? (currentMa !== null ? currentMa / 1000 : null);
+
+        const power =
+          toNum(pick(r, ['power', 'watts', 'power_w'])) ??
+          (voltage !== null && current !== null
+            ? Math.round(voltage * current * 1000) / 1000
+            : null);
+
+        const observations =
+          toStr(pick(r, ['observations', 'notes', 'note', 'comments'])) ??
+          [
+            toStr(pick(r, ['category'])),
+            toStr(pick(r, ['power_interface'])),
+            r.verified === true ? 'verified' : null,
+          ]
+            .filter(Boolean)
+            .join(' · ') ||
+          null;
+
         return {
           source_id: sourceId,
           name,
           manufacturer: toStr(
             pick(r, ['manufacturer', 'brand', 'maker', 'vendor']),
           ),
-          voltage: toNum(pick(r, ['voltage', 'volts', 'v', 'power_voltage'])),
-          current: toNum(pick(r, ['current', 'amps', 'a', 'current_a'])),
+          voltage,
+          current,
           polarity: toStr(pick(r, ['polarity', 'power_polarity'])),
-          power: toNum(pick(r, ['power', 'watts', 'power_w'])),
-          connector: toStr(pick(r, ['connector', 'plug', 'connector_name'])),
+          power,
+          connector: toStr(
+            pick(r, ['connector', 'plug', 'connector_name', 'connector_type']),
+          ),
           connector_type: toStr(
             pick(r, ['connector_type', 'plug_type', 'connectorType']),
           ),
-          observations: toStr(
-            pick(r, ['observations', 'notes', 'note', 'comments']),
-          ),
+          observations,
           last_synced_at: now,
         };
       })
+
       .filter((r): r is NonNullable<typeof r> => r !== null)
       .filter((r) => {
         if (seen.has(r.source_id)) return false;
