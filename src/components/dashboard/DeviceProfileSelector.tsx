@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { DEVICES, MANUAL_IDX, type MusicalDevice } from '../../data/devices';
+import { useSyncedDevices, toMusicalDevice } from '../../hooks/useSyncedDevices';
 
 interface DeviceProfileSelectorProps {
   activeName: string | null;
@@ -8,6 +9,7 @@ interface DeviceProfileSelectorProps {
 
 export default function DeviceProfileSelector({ activeName, onSelect }: DeviceProfileSelectorProps) {
   const [query, setQuery] = useState('');
+  const { devices: synced } = useSyncedDevices();
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -21,7 +23,24 @@ export default function DeviceProfileSelector({ activeName, onSelect }: DevicePr
     });
   }, [query]);
 
-  const activeDevice = DEVICES.find(d => d.name === activeName) ?? null;
+  const syncedProfiles = useMemo(() => {
+    const localNames = new Set(DEVICES.map(d => d.name.toLowerCase()));
+    const q = query.trim().toLowerCase();
+    return synced
+      .map(toMusicalDevice)
+      .filter(d => !localNames.has(d.name.toLowerCase()))
+      .filter(d =>
+        !q ||
+        d.name.toLowerCase().includes(q) ||
+        (d.brand ?? '').toLowerCase().includes(q),
+      );
+  }, [synced, query]);
+
+  const activeDevice =
+    DEVICES.find(d => d.name === activeName) ??
+    syncedProfiles.find(d => d.name === activeName) ??
+    null;
+
 
   return (
     <div className="rounded-2xl border border-gray-100 bg-white p-5">
