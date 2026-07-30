@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 
 import Toggle from '../components/ui/Toggle';
+import DeviceSyncSettings from '../components/settings/DeviceSyncSettings';
 import { AppSettings, UserPreset } from '../types/picopd';
 
 const defaultSettings: AppSettings = {
