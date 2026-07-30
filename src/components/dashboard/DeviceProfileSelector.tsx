@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { DEVICES, MANUAL_IDX, type MusicalDevice } from '../../data/devices';
+import { useSyncedDevices, toMusicalDevice } from '../../hooks/useSyncedDevices';
 
 interface DeviceProfileSelectorProps {
   activeName: string | null;
@@ -8,6 +9,7 @@ interface DeviceProfileSelectorProps {
 
 export default function DeviceProfileSelector({ activeName, onSelect }: DeviceProfileSelectorProps) {
   const [query, setQuery] = useState('');
+  const { devices: synced } = useSyncedDevices();
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -21,7 +23,24 @@ export default function DeviceProfileSelector({ activeName, onSelect }: DevicePr
     });
   }, [query]);
 
-  const activeDevice = DEVICES.find(d => d.name === activeName) ?? null;
+  const syncedProfiles = useMemo(() => {
+    const localNames = new Set(DEVICES.map(d => d.name.toLowerCase()));
+    const q = query.trim().toLowerCase();
+    return synced
+      .map(toMusicalDevice)
+      .filter(d => !localNames.has(d.name.toLowerCase()))
+      .filter(d =>
+        !q ||
+        d.name.toLowerCase().includes(q) ||
+        (d.brand ?? '').toLowerCase().includes(q),
+      );
+  }, [synced, query]);
+
+  const activeDevice =
+    DEVICES.find(d => d.name === activeName) ??
+    syncedProfiles.find(d => d.name === activeName) ??
+    null;
+
 
   return (
     <div className="rounded-2xl border border-gray-100 bg-white p-5">
@@ -67,60 +86,20 @@ export default function DeviceProfileSelector({ activeName, onSelect }: DevicePr
 
       <div className="max-h-64 overflow-y-auto pr-1">
         <ul className="space-y-1">
-          {filtered.map(({ d }) => {
-            const isActive = activeName === d.name;
-            const polTag = d.defaultPolarity === 'center-positive' ? 'C+' : 'C−';
-            return (
-              <li key={d.name}>
-                <button
-                  onClick={() => onSelect(d)}
-                  className={[
-                    'flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2 text-left transition-colors duration-150',
-                    isActive
-                      ? 'border border-blue-400 bg-blue-50'
-                      : 'border border-transparent hover:bg-gray-50',
-                  ].join(' ')}
-                >
-                  <div className="min-w-0">
-                    <div
-                      className={`truncate text-sm font-medium ${
-                        isActive ? 'text-blue-800' : 'text-gray-900'
-                      }`}
-                    >
-                      {d.name}
-                    </div>
-                    {d.brand && (
-                      <div className="truncate text-xs text-gray-500">{d.brand}</div>
-                    )}
-                  </div>
-                  <div className="flex shrink-0 items-center gap-2">
-                    <span
-                      className={[
-                        'rounded px-1.5 py-0.5 text-[10px] font-semibold tabular-nums',
-                        d.defaultPolarity === 'center-negative'
-                          ? 'bg-amber-100 text-amber-800'
-                          : 'bg-emerald-100 text-emerald-800',
-                      ].join(' ')}
-                      title={d.polarityLabel.trim()}
-                    >
-                      {polTag}
-                    </span>
-                    <div className="text-right tabular-nums">
-                      <div
-                        className={`text-sm font-medium ${
-                          isActive ? 'text-blue-800' : 'text-gray-900'
-                        }`}
-                      >
-                        {d.voltage.toFixed(1)} V
-                      </div>
-                      <div className="text-xs text-gray-500">{d.current.toFixed(1)} A</div>
-                    </div>
-                  </div>
-                </button>
-              </li>
-            );
-          })}
-          {filtered.length === 0 && (
+          {filtered.map(({ d }) => (
+            <DeviceRow key={d.name} d={d} isActive={activeName === d.name} onSelect={onSelect} />
+          ))}
+
+          {syncedProfiles.length > 0 && (
+            <li className="px-3 pb-1 pt-3 text-[10px] font-semibold uppercase tracking-widest text-gray-400">
+              Synced from RigPower
+            </li>
+          )}
+          {syncedProfiles.map(d => (
+            <DeviceRow key={`sync-${d.name}`} d={d} isActive={activeName === d.name} onSelect={onSelect} />
+          ))}
+
+          {filtered.length === 0 && syncedProfiles.length === 0 && (
             <li className="px-3 py-6 text-center text-xs text-gray-400">
               No devices match “{query}”.
             </li>
@@ -130,3 +109,53 @@ export default function DeviceProfileSelector({ activeName, onSelect }: DevicePr
     </div>
   );
 }
+
+function DeviceRow({
+  d, isActive, onSelect,
+}: {
+  d: MusicalDevice;
+  isActive: boolean;
+  onSelect: (device: MusicalDevice) => void;
+}) {
+  const polTag = d.defaultPolarity === 'center-positive' ? 'C+' : 'C−';
+  return (
+    <li>
+      <button
+        onClick={() => onSelect(d)}
+        className={[
+          'flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2 text-left transition-colors duration-150',
+          isActive
+            ? 'border border-blue-400 bg-blue-50'
+            : 'border border-transparent hover:bg-gray-50',
+        ].join(' ')}
+      >
+        <div className="min-w-0">
+          <div className={`truncate text-sm font-medium ${isActive ? 'text-blue-800' : 'text-gray-900'}`}>
+            {d.name}
+          </div>
+          {d.brand && <div className="truncate text-xs text-gray-500">{d.brand}</div>}
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          <span
+            className={[
+              'rounded px-1.5 py-0.5 text-[10px] font-semibold tabular-nums',
+              d.defaultPolarity === 'center-negative'
+                ? 'bg-amber-100 text-amber-800'
+                : 'bg-emerald-100 text-emerald-800',
+            ].join(' ')}
+            title={d.polarityLabel.trim()}
+          >
+            {polTag}
+          </span>
+          <div className="text-right tabular-nums">
+            <div className={`text-sm font-medium ${isActive ? 'text-blue-800' : 'text-gray-900'}`}>
+              {d.voltage.toFixed(1)} V
+            </div>
+            <div className="text-xs text-gray-500">{d.current.toFixed(1)} A</div>
+          </div>
+        </div>
+      </button>
+    </li>
+  );
+}
+

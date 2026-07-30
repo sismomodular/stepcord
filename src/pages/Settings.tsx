@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 
 import Toggle from '../components/ui/Toggle';
+import DeviceSyncSettings from '../components/settings/DeviceSyncSettings';
 import { AppSettings, UserPreset } from '../types/picopd';
 
 const defaultSettings: AppSettings = {
@@ -85,6 +86,8 @@ export default function Settings() {
         </button>
 
         <h1 className="text-2xl font-semibold text-gray-900">Settings</h1>
+
+        <DeviceSyncSettings />
 
         {/* CARD 1: Connection */}
         <Card icon={Plug} title="Connection">
