@@ -14,7 +14,87 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      devices: {
+        Row: {
+          connector: string | null
+          connector_type: string | null
+          created_at: string
+          current: number | null
+          id: string
+          last_synced_at: string
+          manufacturer: string | null
+          name: string
+          observations: string | null
+          polarity: string | null
+          power: number | null
+          source_id: string
+          updated_at: string
+          voltage: number | null
+        }
+        Insert: {
+          connector?: string | null
+          connector_type?: string | null
+          created_at?: string
+          current?: number | null
+          id?: string
+          last_synced_at?: string
+          manufacturer?: string | null
+          name: string
+          observations?: string | null
+          polarity?: string | null
+          power?: number | null
+          source_id: string
+          updated_at?: string
+          voltage?: number | null
+        }
+        Update: {
+          connector?: string | null
+          connector_type?: string | null
+          created_at?: string
+          current?: number | null
+          id?: string
+          last_synced_at?: string
+          manufacturer?: string | null
+          name?: string
+          observations?: string | null
+          polarity?: string | null
+          power?: number | null
+          source_id?: string
+          updated_at?: string
+          voltage?: number | null
+        }
+        Relationships: []
+      }
+      sync_state: {
+        Row: {
+          created_at: string
+          error: string | null
+          job: string
+          last_run_at: string | null
+          rows_synced: number
+          status: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          error?: string | null
+          job: string
+          last_run_at?: string | null
+          rows_synced?: number
+          status?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          error?: string | null
+          job?: string
+          last_run_at?: string | null
+          rows_synced?: number
+          status?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
