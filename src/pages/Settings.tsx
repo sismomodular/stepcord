@@ -87,6 +87,8 @@ export default function Settings() {
 
         <h1 className="text-2xl font-semibold text-gray-900">Settings</h1>
 
+        <DeviceSyncSettings />
+
         {/* CARD 1: Connection */}
         <Card icon={Plug} title="Connection">
           <SettingsRow
