@@ -127,16 +127,17 @@ Deno.serve(async (req) => {
             ? Math.round(voltage * current * 1000) / 1000
             : null);
 
+        const fallbackObs = [
+          toStr(pick(r, ['category'])),
+          toStr(pick(r, ['power_interface'])),
+          r.verified === true ? 'verified' : null,
+        ]
+          .filter(Boolean)
+          .join(' · ');
+
         const observations =
           toStr(pick(r, ['observations', 'notes', 'note', 'comments'])) ??
-          [
-            toStr(pick(r, ['category'])),
-            toStr(pick(r, ['power_interface'])),
-            r.verified === true ? 'verified' : null,
-          ]
-            .filter(Boolean)
-            .join(' · ') ||
-          null;
+          (fallbackObs.length > 0 ? fallbackObs : null);
 
         return {
           source_id: sourceId,
