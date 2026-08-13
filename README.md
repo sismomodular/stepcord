@@ -1,6 +1,6 @@
 # stepcord
 
-Create a dashboard for my new development product.
+StepCord is a smart USB-C Power Delivery ecosystem designed for musical instruments and stage rigs. It automatically detects and configures the correct voltage and current for each connected device by querying a database of thousands of equipment profiles, eliminating the need for multiple dedicated power adapters. Built around the AP33772S PD controller and a Waveshare RP2350 platform, StepCord prioritizes plug-and-play simplicity, high energy efficiency, and low electrical noise — turning a single smart cable/hub into a universal, auto-configuring power source for synths, pedals, and other gear.
 
 This project was built with [Lovable](https://lovable.dev).
 
