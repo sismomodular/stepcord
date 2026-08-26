@@ -14,14 +14,20 @@ function formatDate(iso: string | null) {
 export default function DeviceSyncSettings() {
   const { devices, syncState, loading, refresh } = useSyncedDevices();
   const [syncing, setSyncing] = useState(false);
+  const [secret, setSecret] = useState('');
   const [message, setMessage] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
 
   const runSync = async () => {
+    if (!secret.trim()) {
+      setMessage({ kind: 'error', text: 'Sync trigger secret is required to run a manual sync.' });
+      return;
+    }
     setSyncing(true);
     setMessage(null);
     try {
       const { data, error } = await supabase.functions.invoke('sync-rigpower-devices', {
         body: {},
+        headers: { 'x-sync-secret': secret.trim() },
       });
       if (error) throw new Error(error.message);
       if (data && data.ok === false) throw new Error(data.error ?? 'Sync failed');
@@ -35,6 +41,7 @@ export default function DeviceSyncSettings() {
       setSyncing(false);
     }
   };
+
 
   return (
     <section className="rounded-xl border border-gray-100 bg-white p-5">
