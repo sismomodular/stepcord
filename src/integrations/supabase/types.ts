@@ -65,6 +65,39 @@ export type Database = {
         }
         Relationships: []
       }
+      monitor: {
+        Row: {
+          created_at: string
+          current: number | null
+          id: string
+          label: string | null
+          output_enabled: boolean
+          power: number | null
+          updated_at: string
+          voltage: number | null
+        }
+        Insert: {
+          created_at?: string
+          current?: number | null
+          id?: string
+          label?: string | null
+          output_enabled?: boolean
+          power?: number | null
+          updated_at?: string
+          voltage?: number | null
+        }
+        Update: {
+          created_at?: string
+          current?: number | null
+          id?: string
+          label?: string | null
+          output_enabled?: boolean
+          power?: number | null
+          updated_at?: string
+          voltage?: number | null
+        }
+        Relationships: []
+      }
       sync_state: {
         Row: {
           created_at: string
