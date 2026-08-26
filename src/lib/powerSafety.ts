@@ -106,6 +106,40 @@ export function acDeviceGuard(spec: PowerSpec | null | undefined): SafetyResult 
   return null;
 }
 
+/**
+ * Fails closed on incomplete device data (typically synced records missing
+ * voltage / current / polarity). Never assumes a default value.
+ */
+export function incompleteDataGuard(
+  voltage: number | null | undefined,
+  current: number | null | undefined,
+  polarity: PowerPolarity | null | undefined,
+): SafetyResult | null {
+  if (voltage == null || !Number.isFinite(voltage)) {
+    return {
+      level: "blocked",
+      code: "MISSING_VOLTAGE",
+      message: "⛔ No verified voltage on file for this device. Output blocked — confirm the spec manually.",
+    };
+  }
+  if (current == null || !Number.isFinite(current)) {
+    return {
+      level: "warning",
+      code: "MISSING_CURRENT",
+      message: "No verified current limit on file. Confirm the device's current draw before powering on.",
+    };
+  }
+  if (!polarity) {
+    return {
+      level: "warning",
+      code: "UNVERIFIED_POLARITY",
+      message: "Polarity unverified for this device. Confirm manually before connecting.",
+    };
+  }
+  return null;
+}
+
+
 export interface AuditFinding {
   id: string;
   brand: string;
