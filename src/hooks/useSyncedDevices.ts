@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import type { MusicalDevice, Polarity } from '../data/devices';
+import { POLARITY_LABELS, type MusicalDevice, type Polarity } from '../data/devices';
 
 export interface SyncedDevice {
   id: string;
@@ -25,26 +25,40 @@ export interface SyncState {
   error: string | null;
 }
 
-/** Normalizes free-form polarity strings from RigPower into the app's polarity type. */
-export function normalizePolarity(value: string | null): Polarity {
-  const v = (value ?? '').toLowerCase();
-  if (v.includes('neg') || v === 'c-' || v === 'center_negative') {
-    return 'center-negative';
-  }
-  return 'center-positive';
+/**
+ * Normalizes free-form polarity strings from RigPower.
+ * Fails closed: anything not explicitly recognised becomes 'unverified'
+ * — never a silent fallback to center-positive.
+ */
+export function normalizePolarity(value: string | null | undefined): Polarity {
+  const v = (value ?? '').trim().toLowerCase();
+  if (!v) return 'unverified';
+
+  const negative = ['c-', 'c −', 'c–', 'center-negative', 'center_negative', 'centre-negative', 'negative', 'neg'];
+  const positive = ['c+', 'center-positive', 'center_positive', 'centre-positive', 'positive', 'pos'];
+
+  if (negative.includes(v) || /(^|[^a-z])neg/.test(v)) return 'center-negative';
+  if (positive.includes(v) || /(^|[^a-z])pos/.test(v)) return 'center-positive';
+  return 'unverified';
 }
 
-/** Maps a synced device onto the profile shape used by the PicoPD auto-config logic. */
+/**
+ * Maps a synced device onto the profile shape used by the auto-config logic.
+ * Missing voltage/current stay `null` — no invented defaults.
+ */
 export function toMusicalDevice(d: SyncedDevice): MusicalDevice {
   const defaultPolarity = normalizePolarity(d.polarity);
+  const voltage = typeof d.voltage === 'number' && Number.isFinite(d.voltage) ? d.voltage : null;
+  const current = typeof d.current === 'number' && Number.isFinite(d.current) ? d.current : null;
   return {
     name: d.name,
     brand: d.manufacturer ?? undefined,
-    voltage: d.voltage ?? 5,
-    current: d.current ?? 1,
+    voltage,
+    current,
     defaultPolarity,
-    polarityLabel:
-      defaultPolarity === 'center-negative' ? 'USE INVERTER C-' : 'KEEP CENTER + ',
+    polarityLabel: POLARITY_LABELS[defaultPolarity],
+    verified: voltage != null && current != null && defaultPolarity !== 'unverified',
+    source: 'synced',
   };
 }
 

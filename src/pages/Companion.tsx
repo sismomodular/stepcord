@@ -43,7 +43,11 @@ const EXTRA_PROFILES: CompanionProfile[] = [
 const COMPANION_PROFILES: CompanionProfile[] = [
   ...DEVICES
     .filter((d) => d.name !== "[ MANUAL MODE ]")
+    // Only fully verified specs may drive a companion QC profile.
+    .filter((d): d is typeof d & { voltage: number; current: number } =>
+      d.verified && d.voltage != null && d.current != null)
     .map<CompanionProfile>((d) => {
+
       const highRisk =
         d.name === "Volca Series" || d.name === "MicroFreak" || d.name === "JD-Xi Synth";
       let plugSpec = "2.1 × 5.5 mm barrel";

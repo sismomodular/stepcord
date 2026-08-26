@@ -1,5 +1,5 @@
 import { DeviceInfo } from '../../types/picopd';
-import type { FirmwareState } from '../../hooks/useSerial';
+import type { FirmwareState } from '../../hooks/usePicoSerial';
 
 interface OledPreviewProps {
   firmwareState: FirmwareState | null;

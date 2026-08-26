@@ -2,36 +2,123 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { ConnectionStatus, DeviceInfo, TelemetryReading } from '../types/picopd';
 import type { LogEvent } from '../components/dashboard/EventLog';
 
+// ----------------------------------------------------------------------------
+// Unified PicoPD serial transport — JSON line-delimited @ 115200 baud.
+// This is the ONLY protocol the firmware (firmware/picopd_bridge) understands.
+//
+// Pico → Host (one JSON object per line):
+//   {"v":9.01,"i":0.42,"p":3.78,"mode":"FIXED","profile":"Volca Series",
+//    "polarity":"center-positive","en":true,"err":""}
+//
+// Host → Pico (JSON + '\n'):
+//   {"select":"Volca Series"}
+//   {"set":"pps","v":12.0,"i":2.0}   |  {"set":"fixed","v":9.0,"i":1.0}
+//   {"output":"on"} | {"output":"off"}
+// ----------------------------------------------------------------------------
+
+export interface PicoTelemetry {
+  v: number;
+  i: number;
+  p: number;
+  mode: 'PPS' | 'FIXED';
+  profile: string;
+  polarity: 'center-positive' | 'center-negative' | null;
+  en: boolean;
+  err: string;
+}
+
+export type ParsedLine =
+  | { kind: 'telemetry'; telemetry: PicoTelemetry }
+  | { kind: 'encoder'; dir: 'CW' | 'CCW' }
+  | { kind: 'log'; message: string };
+
+/**
+ * Pure parser for a single line coming from the firmware.
+ * Exported for unit testing — must never throw.
+ */
+export function parsePicoLine(raw: string): ParsedLine | null {
+  const line = raw.trim().replace(/\r$/, '');
+  if (!line) return null;
+
+  // Plain-text encoder notification: "ENC:CW" / "ENC:CCW"
+  if (line.startsWith('ENC:')) {
+    return { kind: 'encoder', dir: line.slice(4).toUpperCase() === 'CCW' ? 'CCW' : 'CW' };
+  }
+
+  if (!line.startsWith('{')) return { kind: 'log', message: line };
+
+  let obj: Record<string, unknown>;
+  try {
+    obj = JSON.parse(line) as Record<string, unknown>;
+  } catch {
+    return { kind: 'log', message: line };
+  }
+
+  // JSON encoder event: {"enc":"CW"}
+  if (typeof obj.enc === 'string') {
+    return { kind: 'encoder', dir: obj.enc.toUpperCase() === 'CCW' ? 'CCW' : 'CW' };
+  }
+
+  const hasV = typeof obj.v === 'number';
+  const hasI = typeof obj.i === 'number';
+  if (!hasV && !hasI) return { kind: 'log', message: line };
+
+  const v = hasV ? (obj.v as number) : 0;
+  const i = hasI ? (obj.i as number) : 0;
+  const p = typeof obj.p === 'number' ? obj.p : v * i;
+  const polarity =
+    obj.polarity === 'center-positive' || obj.polarity === 'center-negative'
+      ? obj.polarity
+      : null;
+
+  return {
+    kind: 'telemetry',
+    telemetry: {
+      v,
+      i,
+      p,
+      mode: obj.mode === 'PPS' ? 'PPS' : 'FIXED',
+      profile: typeof obj.profile === 'string' ? obj.profile : '',
+      polarity,
+      en: obj.en === true,
+      err: typeof obj.err === 'string' ? obj.err : '',
+    },
+  };
+}
+
 export interface FirmwareState {
   /** 0 = STANDBY (output off), 3 = LIVE (output on) */
   state: 0 | 3;
-  /** Target voltage from firmware echo (V) */
   targetVoltage: number;
-  /** Target current limit from firmware echo (A) */
   targetCurrent: number;
-  /** Active device profile name (e.g. "MANUAL CONTROL", "Web Profile", or device name) */
   name: string;
-  /** True when name is a web-loaded profile (not MANUAL CONTROL / MANUAL VOLTAGE) */
   isWebMode: boolean;
-  /** Timestamp of last echo */
+  mode: 'PPS' | 'FIXED';
+  polarity: 'center-positive' | 'center-negative' | null;
   timestamp: number;
 }
 
-interface UseSerialOptions {
+export type PicoCommand =
+  | { select: string }
+  | { set: 'pps' | 'fixed'; v: number; i: number }
+  | { output: 'on' | 'off' };
+
+interface UsePicoSerialOptions {
   autoReconnect: boolean;
   onReading: (r: TelemetryReading) => void;
   onEvent: (e: Omit<LogEvent, 'timestamp'>) => void;
   onEncoder?: (dir: 'CW' | 'CCW') => void;
 }
 
-interface UseSerialResult {
+interface UsePicoSerialResult {
   supported: boolean;
   status: ConnectionStatus;
   deviceInfo: DeviceInfo | null;
   firmwareState: FirmwareState | null;
   connect: () => Promise<void>;
   disconnect: () => Promise<void>;
-  sendCommand: (cmd: string) => Promise<void>;
+  /** Sends a JSON command line to the firmware. Returns false when not connected. */
+  send: (cmd: PicoCommand) => Promise<boolean>;
 }
 
 type SerialPortLike = {
@@ -42,7 +129,12 @@ type SerialPortLike = {
   getInfo?: () => { usbVendorId?: number; usbProductId?: number };
 };
 
-export function useSerial({ autoReconnect, onReading, onEvent, onEncoder }: UseSerialOptions): UseSerialResult {
+export function usePicoSerial({
+  autoReconnect,
+  onReading,
+  onEvent,
+  onEncoder,
+}: UsePicoSerialOptions): UsePicoSerialResult {
   const supported = typeof navigator !== 'undefined' && 'serial' in navigator;
 
   const [status, setStatus] = useState<ConnectionStatus>('disconnected');
@@ -53,10 +145,10 @@ export function useSerial({ autoReconnect, onReading, onEvent, onEncoder }: UseS
   const readerRef = useRef<ReadableStreamDefaultReader<string> | null>(null);
   const writerRef = useRef<WritableStreamDefaultWriter<Uint8Array> | null>(null);
   const userClosedRef = useRef(false);
+  const lastErrRef = useRef<string>('');
   const autoReconnectRef = useRef(autoReconnect);
   useEffect(() => { autoReconnectRef.current = autoReconnect; }, [autoReconnect]);
 
-  // Keep latest callbacks without re-binding the read loop
   const onReadingRef = useRef(onReading);
   const onEventRef = useRef(onEvent);
   const onEncoderRef = useRef(onEncoder);
@@ -71,6 +163,48 @@ export function useSerial({ autoReconnect, onReading, onEvent, onEncoder }: UseS
     try { await writerRef.current?.close(); } catch { /* noop */ }
     try { writerRef.current?.releaseLock(); } catch { /* noop */ }
     writerRef.current = null;
+  }, []);
+
+  const handleParsed = useCallback((parsed: ParsedLine) => {
+    if (parsed.kind === 'encoder') {
+      onEncoderRef.current?.(parsed.dir);
+      onEventRef.current({
+        type: 'info',
+        message: `Encoder ${parsed.dir === 'CW' ? 'clockwise' : 'counter-clockwise'}`,
+      });
+      return;
+    }
+    if (parsed.kind === 'log') {
+      onEventRef.current({ type: 'info', message: parsed.message });
+      return;
+    }
+
+    const t = parsed.telemetry;
+    const fwState: 0 | 3 = t.en ? 3 : 0;
+    const name = t.profile || 'MANUAL CONTROL';
+
+    setFirmwareState({
+      state: fwState,
+      targetVoltage: t.v,
+      targetCurrent: t.i,
+      name,
+      isWebMode: name !== 'MANUAL CONTROL' && name !== 'MANUAL VOLTAGE' && name !== 'Manual',
+      mode: t.mode,
+      polarity: t.polarity,
+      timestamp: Date.now(),
+    });
+
+    onReadingRef.current({
+      voltage: t.v,
+      current: t.i,
+      power: parseFloat(t.p.toFixed(2)),
+      timestamp: Date.now(),
+    });
+
+    if (t.err && t.err !== lastErrRef.current) {
+      onEventRef.current({ type: 'error', message: `Firmware: ${t.err}` });
+    }
+    lastErrRef.current = t.err;
   }, []);
 
   const startReadLoop = useCallback(async (port: SerialPortLike) => {
@@ -91,65 +225,10 @@ export function useSerial({ autoReconnect, onReading, onEvent, onEncoder }: UseS
         buffer += value;
         let nl: number;
         while ((nl = buffer.indexOf('\n')) >= 0) {
-          const line = buffer.slice(0, nl).trim().replace(/\r$/, '');
+          const line = buffer.slice(0, nl);
           buffer = buffer.slice(nl + 1);
-          if (!line) continue;
-
-          // Encoder rotation events from firmware: "ENC:CW" / "ENC:CCW"
-          if (line.startsWith('ENC:')) {
-            const dir = line.slice(4) === 'CW' ? 'CW' : 'CCW';
-            onEncoderRef.current?.(dir);
-            onEventRef.current({
-              type: 'info',
-              message: `Encoder ${dir === 'CW' ? 'clockwise' : 'counter-clockwise'}`,
-            });
-            continue;
-          }
-
-          // Firmware CSV echo: "state,voltage,current,name"
-          // state: 0 = STANDBY, 3 = LIVE
-          const parts = line.split(',');
-          if (parts.length >= 3) {
-            const state = parseInt(parts[0], 10);
-            const v = parseFloat(parts[1]);
-            const i = parseFloat(parts[2]);
-            const name = parts.slice(3).join(',').trim();
-            if (Number.isFinite(v) && Number.isFinite(i)) {
-              const fwState: 0 | 3 = state === 3 ? 3 : 0;
-              const isWebMode =
-                name.length > 0 && name !== 'MANUAL CONTROL' && name !== 'MANUAL VOLTAGE';
-
-              setFirmwareState({
-                state: fwState,
-                targetVoltage: v,
-                targetCurrent: i,
-                name: name || 'MANUAL CONTROL',
-                isWebMode,
-                timestamp: Date.now(),
-              });
-
-              // Telemetry: when output is off, report zeros for current/power.
-              const liveV = fwState === 3 ? v : 0;
-              const liveI = fwState === 3 ? i : 0;
-              const reading: TelemetryReading = {
-                voltage: liveV,
-                current: liveI,
-                power: parseFloat((liveV * liveI).toFixed(2)),
-                timestamp: Date.now(),
-              };
-              onReadingRef.current(reading);
-              onEventRef.current({
-                type: fwState === 3 ? 'success' : 'info',
-                message: fwState === 3
-                  ? `LIVE · ${v.toFixed(1)}V / ${i.toFixed(1)}A${name ? ` · ${name}` : ''}`
-                  : `STANDBY${name ? ` · ${name}` : ''}`,
-              });
-              continue;
-            }
-          }
-
-          // Any other firmware log line — surface as info
-          onEventRef.current({ type: 'info', message: line });
+          const parsed = parsePicoLine(line);
+          if (parsed) handleParsed(parsed);
         }
       }
     } catch (err) {
@@ -158,7 +237,7 @@ export function useSerial({ autoReconnect, onReading, onEvent, onEncoder }: UseS
       try { reader.releaseLock(); } catch { /* noop */ }
       await closed;
     }
-  }, []);
+  }, [handleParsed]);
 
   const openPort = useCallback(async (port: SerialPortLike) => {
     await port.open({ baudRate: 115200 });
@@ -170,13 +249,10 @@ export function useSerial({ autoReconnect, onReading, onEvent, onEncoder }: UseS
       : 'Serial';
     setDeviceInfo({ name: 'PicoPD', port: vendor, pdVersion: 'PD3.1' });
     setStatus('connected');
-    onEventRef.current({ type: 'success', message: 'Connected · PicoPD' });
+    onEventRef.current({ type: 'success', message: 'Connected · PicoPD (JSON protocol)' });
 
-    if (port.writable) {
-      writerRef.current = port.writable.getWriter();
-    }
+    if (port.writable) writerRef.current = port.writable.getWriter();
 
-    // Run the read loop. When it returns the port closed.
     void startReadLoop(port).then(async () => {
       await cleanupStreams();
       try { await port.close(); } catch { /* noop */ }
@@ -234,14 +310,13 @@ export function useSerial({ autoReconnect, onReading, onEvent, onEncoder }: UseS
     onEventRef.current({ type: 'info', message: 'Disconnected' });
   }, [cleanupStreams]);
 
-  const sendCommand = useCallback(async (cmd: string) => {
+  const send = useCallback(async (cmd: PicoCommand): Promise<boolean> => {
     const writer = writerRef.current;
-    if (!writer) return;
-    const encoder = new TextEncoder();
-    await writer.write(encoder.encode(cmd.endsWith('\n') ? cmd : cmd + '\n'));
+    if (!writer) return false;
+    await writer.write(new TextEncoder().encode(JSON.stringify(cmd) + '\n'));
+    return true;
   }, []);
 
-  // Best-effort cleanup on unmount
   useEffect(() => {
     return () => {
       userClosedRef.current = true;
@@ -251,5 +326,5 @@ export function useSerial({ autoReconnect, onReading, onEvent, onEncoder }: UseS
     };
   }, [cleanupStreams]);
 
-  return { supported, status, deviceInfo, firmwareState, connect, disconnect, sendCommand };
+  return { supported, status, deviceInfo, firmwareState, connect, disconnect, send };
 }

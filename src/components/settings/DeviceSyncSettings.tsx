@@ -14,14 +14,20 @@ function formatDate(iso: string | null) {
 export default function DeviceSyncSettings() {
   const { devices, syncState, loading, refresh } = useSyncedDevices();
   const [syncing, setSyncing] = useState(false);
+  const [secret, setSecret] = useState('');
   const [message, setMessage] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
 
   const runSync = async () => {
+    if (!secret.trim()) {
+      setMessage({ kind: 'error', text: 'Sync trigger secret is required to run a manual sync.' });
+      return;
+    }
     setSyncing(true);
     setMessage(null);
     try {
       const { data, error } = await supabase.functions.invoke('sync-rigpower-devices', {
         body: {},
+        headers: { 'x-sync-secret': secret.trim() },
       });
       if (error) throw new Error(error.message);
       if (data && data.ok === false) throw new Error(data.error ?? 'Sync failed');
@@ -35,6 +41,7 @@ export default function DeviceSyncSettings() {
       setSyncing(false);
     }
   };
+
 
   return (
     <section className="rounded-xl border border-gray-100 bg-white p-5">
@@ -57,9 +64,29 @@ export default function DeviceSyncSettings() {
         </button>
       </div>
 
+      <div className="border-b border-gray-100 py-3">
+        <label className="text-sm font-medium text-gray-900" htmlFor="sync-secret">
+          Sync trigger secret
+        </label>
+        <div className="mt-0.5 text-xs text-gray-400">
+          Required — the sync endpoint runs with elevated privileges and never accepts
+          unauthenticated calls. The scheduled daily sync uses the same secret.
+        </div>
+        <input
+          id="sync-secret"
+          type="password"
+          value={secret}
+          onChange={(e) => setSecret(e.target.value)}
+          autoComplete="off"
+          placeholder="x-sync-secret"
+          className="mt-2 w-full rounded-md border border-gray-200 bg-gray-50 px-2 py-1.5 text-xs text-gray-700 focus:border-blue-400 focus:bg-white focus:outline-none"
+        />
+      </div>
+
       <div className="flex items-center justify-between gap-4 py-3">
         <div className="min-w-0">
           <div className="text-sm font-medium text-gray-900">Cached devices</div>
+
           <div className="mt-0.5 text-xs text-gray-400">
             RigPower is the source of truth — this copy is read-only.
           </div>

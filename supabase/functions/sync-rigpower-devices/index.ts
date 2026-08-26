@@ -30,13 +30,19 @@ Deno.serve(async (req) => {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
 
+  // Authentication is MANDATORY: this endpoint runs with the service role.
+  // If the secret is not configured, refuse every request (fail closed).
   const triggerSecret = Deno.env.get('SYNC_TRIGGER_SECRET');
-  if (triggerSecret) {
-    const provided = req.headers.get('x-sync-secret');
-    if (provided !== triggerSecret) {
-      return json({ ok: false, error: 'Unauthorized' }, 401);
-    }
+  if (!triggerSecret) {
+    return json(
+      { ok: false, error: 'Server misconfigured: SYNC_TRIGGER_SECRET is not set.' },
+      500,
+    );
   }
+  if (req.headers.get('x-sync-secret') !== triggerSecret) {
+    return json({ ok: false, error: 'Unauthorized' }, 401);
+  }
+
 
   const rigUrl = Deno.env.get('RIGPOWER_SUPABASE_URL');
   const rigKey = Deno.env.get('RIGPOWER_ANON_KEY');
