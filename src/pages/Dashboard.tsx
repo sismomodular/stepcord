@@ -9,27 +9,18 @@ import PpsControl from '../components/dashboard/PpsControl';
 import OledPreview from '../components/dashboard/OledPreview';
 import EventLog, { LogEvent } from '../components/dashboard/EventLog';
 import DeviceProfileSelector from '../components/dashboard/DeviceProfileSelector';
+import StageArmCard, { type StagedTarget } from '../components/dashboard/StageArmCard';
 
 import { useTelemetry } from '../hooks/useTelemetry';
 import { usePicoSerial, type PicoCommand } from '../hooks/usePicoSerial';
 import {
   DEVICES,
   MANUAL_IDX,
-  findPowerSpec,
   isFirmwareProfile,
-  specPolarityFromUi,
   type MusicalDevice,
 } from '../data/devices';
 import type { PowerPolarity } from '../data/devicePower';
-import {
-  acDeviceGuard,
-  assertVoltageInRange,
-  currentHeadroom,
-  incompleteDataGuard,
-  polarityMismatch,
-  VoltageRangeError,
-  type SafetyResult,
-} from '../lib/powerSafety';
+import { evaluatePreflight } from '../lib/preflight';
 import {
   PDO,
   PPSConfig,
@@ -59,6 +50,9 @@ interface PendingSend {
   run: () => void;
 }
 
+const targetKey = (t: StagedTarget | null) =>
+  t ? `${t.name}|${t.mode}|${t.voltage.toFixed(2)}|${t.current.toFixed(2)}` : 'none';
+
 export default function Dashboard() {
   const navigate = useNavigate();
   const [activePdoIndex, setActivePdoIndex] = useState<number>(3);
@@ -67,6 +61,11 @@ export default function Dashboard() {
   const [activeProfileName, setActiveProfileName] = useState<string | null>(null);
   const [activeDevice, setActiveDevice] = useState<MusicalDevice | null>(null);
   const [pendingSend, setPendingSend] = useState<PendingSend | null>(null);
+
+  // --- Staging state: nothing reaches the hardware until Apply & Power On ---
+  const [staged, setStaged] = useState<StagedTarget | null>(null);
+  const [armed, setArmed] = useState(false);
+  const [appliedTarget, setAppliedTarget] = useState<StagedTarget | null>(null);
 
   const [serialReading, setSerialReading] = useState<TelemetryReading | null>(null);
   const [serialHistory, setSerialHistory] = useState<TelemetryReading[]>([]);
@@ -137,7 +136,6 @@ export default function Dashboard() {
 
   /**
    * Safety pipeline. NOTHING reaches the serial writer without passing here.
-   * Returns null when blocked, otherwise the (optionally confirmable) action.
    */
   const requestSend = useCallback(
     (opts: {
@@ -147,8 +145,9 @@ export default function Dashboard() {
       name: string;
       mode: 'fixed' | 'pps';
       device?: MusicalDevice | null;
+      onCommitted?: () => void;
     }) => {
-      const { state, voltage, current, name, mode, device } = opts;
+      const { state, voltage, current, name, mode, device, onCommitted } = opts;
 
       const commit = () => {
         const cmds: PicoCommand[] = [];
@@ -163,6 +162,7 @@ export default function Dashboard() {
         }
         void dispatch(cmds);
         setOptimisticState({ state, voltage, current, name });
+        onCommitted?.();
       };
 
       // Powering down is always allowed.
@@ -171,65 +171,22 @@ export default function Dashboard() {
         return;
       }
 
-      // 1) Hard voltage envelope.
-      try {
-        assertVoltageInRange(voltage);
-      } catch (err) {
-        const msg = err instanceof VoltageRangeError ? err.message : String(err);
-        pushEvent({ type: 'error', message: `BLOCKED · ${msg}` });
+      const report = evaluatePreflight({ voltage, current, device, supplyPolarity: SUPPLY_POLARITY });
+
+      if (report.blocked) {
+        pushEvent({ type: 'error', message: `BLOCKED · ${report.blocked.message}` });
         return;
       }
 
-      const spec = device ? findPowerSpec(device) : null;
-
-      // 2) AC / mains devices can never be driven from the DC output.
-      const ac = acDeviceGuard(spec);
-      if (ac) {
-        pushEvent({ type: 'error', message: `BLOCKED · ${ac.message}` });
-        return;
-      }
-
-      // 3) Incomplete / unverified device data fails closed.
-      const warnings: SafetyResult[] = [];
-      if (device) {
-        const incomplete = incompleteDataGuard(
-          device.voltage,
-          device.current,
-          spec?.power_polarity ?? specPolarityFromUi(device.defaultPolarity),
-        );
-        if (incomplete) {
-          if (incomplete.level === 'blocked') {
-            pushEvent({ type: 'error', message: `BLOCKED · ${incomplete.message}` });
-            return;
-          }
-          warnings.push(incomplete);
-        }
-      }
-
-      // 4) Polarity check against the supply's actual output polarity.
-      let requireConfirm: SafetyResult | null = null;
-      if (device) {
-        const expected = spec?.power_polarity ?? specPolarityFromUi(device.defaultPolarity);
-        const pol = polarityMismatch(expected, SUPPLY_POLARITY);
-        if (pol.level === 'danger') requireConfirm = pol;
-        else if (pol.level !== 'ok') warnings.push(pol);
-      }
-
-      // 5) Current headroom.
-      if (device) {
-        const required = spec?.power_current_ma ?? (device.current != null ? device.current * 1000 : null);
-        const head = currentHeadroom(current * 1000, required);
-        if (head.level === 'danger' || head.level === 'warning') warnings.push(head);
-      }
-
-      warnings.forEach(w =>
+      report.warnings.forEach(w =>
         pushEvent({ type: w.level === 'danger' ? 'error' : 'warning', message: w.message }),
       );
 
-      if (requireConfirm) {
-        pushEvent({ type: 'warning', message: `Confirmation required · ${requireConfirm.code}` });
+      if (report.confirm) {
+        const confirmation = report.confirm;
+        pushEvent({ type: 'warning', message: `Confirmation required · ${confirmation.code}` });
         setPendingSend({
-          message: requireConfirm.message,
+          message: confirmation.message,
           detail: `${name} · ${voltage.toFixed(1)}V / ${current.toFixed(1)}A`,
           run: () => {
             pushEvent({ type: 'warning', message: `User confirmed polarity override · ${name}` });
@@ -244,56 +201,85 @@ export default function Dashboard() {
     [dispatch, pushEvent],
   );
 
+  // --------------------------------------------------------------------------
+  // Staging — selections only change the staged target.
+  // --------------------------------------------------------------------------
+  const stageTarget = useCallback((t: StagedTarget) => {
+    setStaged(t);
+    setArmed(false);
+  }, []);
+
   const handleSelectPdo = useCallback((pdo: PDO) => {
     setActivePdoIndex(pdo.index);
     if (pdo.type === 'pps') {
-      pushEvent({ type: 'info', message: `PDO ${pdo.index} selected · PPS mode` });
-      requestSend({
-        state: 3, voltage: ppsConfig.targetVoltage, current: ppsConfig.currentLimit,
-        name: 'PPS', mode: 'pps', device: activeDevice,
+      pushEvent({ type: 'info', message: `Staged · PPS ${ppsConfig.targetVoltage.toFixed(1)}V / ${ppsConfig.currentLimit.toFixed(1)}A` });
+      stageTarget({
+        name: activeDevice?.name ?? 'PPS',
+        voltage: ppsConfig.targetVoltage,
+        current: ppsConfig.currentLimit,
+        mode: 'pps',
+        source: 'pps',
+        polarityLabel: activeDevice?.polarityLabel,
       });
     } else {
-      pushEvent({ type: 'info', message: `PDO ${pdo.index} selected · ${pdo.voltage}V/${pdo.current}A` });
-      requestSend({
-        state: 3, voltage: pdo.voltage, current: pdo.current,
-        name: `PDO ${pdo.index}`, mode: 'fixed', device: activeDevice,
+      pushEvent({ type: 'info', message: `Staged · PDO ${pdo.index} — ${pdo.voltage}V/${pdo.current}A` });
+      stageTarget({
+        name: `PDO ${pdo.index}`,
+        voltage: pdo.voltage,
+        current: pdo.current,
+        mode: 'fixed',
+        source: 'pdo',
+        polarityLabel: activeDevice?.polarityLabel,
       });
     }
-  }, [pushEvent, requestSend, ppsConfig, activeDevice]);
+  }, [pushEvent, ppsConfig, activeDevice, stageTarget]);
 
-  const handleApplyPps = useCallback(() => {
-    pushEvent({
-      type: 'info',
-      message: `PPS apply · ${ppsConfig.targetVoltage.toFixed(1)}V / ${ppsConfig.currentLimit.toFixed(1)}A`,
-    });
-    requestSend({
-      state: 3, voltage: ppsConfig.targetVoltage, current: ppsConfig.currentLimit,
-      name: 'PPS', mode: 'pps', device: activeDevice,
-    });
-  }, [ppsConfig, requestSend, pushEvent, activeDevice]);
-
-  // Live PPS: debounced slider changes go through the same safety pipeline.
-  const requestSendRef = useRef(requestSend);
-  useEffect(() => { requestSendRef.current = requestSend; }, [requestSend]);
-  const activeDeviceRef = useRef(activeDevice);
-  useEffect(() => { activeDeviceRef.current = activeDevice; }, [activeDevice]);
-
+  // PPS sliders restage (never send) while PPS mode is the selected PDO.
   useEffect(() => {
     if (activePdoType !== 'pps') return;
-    const t = setTimeout(() => {
-      requestSendRef.current({
-        state: 3, voltage: ppsConfig.targetVoltage, current: ppsConfig.currentLimit,
-        name: 'PPS', mode: 'pps', device: activeDeviceRef.current,
-      });
-    }, 120);
-    return () => clearTimeout(t);
+    setStaged(prev => {
+      const next: StagedTarget = {
+        name: prev?.source === 'pps' ? prev.name : 'PPS',
+        voltage: ppsConfig.targetVoltage,
+        current: ppsConfig.currentLimit,
+        mode: 'pps',
+        source: 'pps',
+        polarityLabel: prev?.polarityLabel,
+      };
+      return next;
+    });
+    setArmed(false);
   }, [ppsConfig.targetVoltage, ppsConfig.currentLimit, activePdoType]);
+
+  const handleApplyPps = useCallback(() => {
+    stageTarget({
+      name: activeDevice?.name ?? 'PPS',
+      voltage: ppsConfig.targetVoltage,
+      current: ppsConfig.currentLimit,
+      mode: 'pps',
+      source: 'pps',
+      polarityLabel: activeDevice?.polarityLabel,
+    });
+    pushEvent({
+      type: 'info',
+      message: `Staged · PPS ${ppsConfig.targetVoltage.toFixed(1)}V / ${ppsConfig.currentLimit.toFixed(1)}A — arm to apply`,
+    });
+  }, [ppsConfig, pushEvent, activeDevice, stageTarget]);
 
   const handleSelectProfile = useCallback((device: MusicalDevice) => {
     setActiveProfileName(device.name);
     setActiveDevice(device);
 
     if (device.voltage == null || device.current == null) {
+      setStaged({
+        name: device.name,
+        voltage: device.voltage ?? 0,
+        current: device.current ?? 0,
+        mode: 'fixed',
+        source: 'profile',
+        polarityLabel: device.polarityLabel,
+      });
+      setArmed(false);
       pushEvent({
         type: 'error',
         message: `BLOCKED · ${device.name} has no verified voltage/current on file. Confirm the spec manually.`,
@@ -301,24 +287,73 @@ export default function Dashboard() {
       return;
     }
 
-    pushEvent({
-      type: 'info',
-      message: `Profile · ${device.name} (${device.voltage.toFixed(1)}V / ${device.current.toFixed(1)}A)`,
-    });
-    requestSend({
-      state: 3,
+    stageTarget({
+      name: device.name,
       voltage: device.voltage,
       current: device.current,
-      name: device.name,
       mode: 'fixed',
-      device,
+      source: 'profile',
+      polarityLabel: device.polarityLabel,
     });
-  }, [requestSend, pushEvent]);
+    pushEvent({
+      type: 'info',
+      message: `Staged · ${device.name} (${device.voltage.toFixed(1)}V / ${device.current.toFixed(1)}A) — arm to apply`,
+    });
+  }, [pushEvent, stageTarget]);
 
   useEffect(() => { handleSelectProfileRef.current = handleSelectProfile; }, [handleSelectProfile]);
 
+  const stagedDevice = useMemo(
+    () => (staged?.source === 'profile' || staged?.name === activeDevice?.name ? activeDevice : null),
+    [staged, activeDevice],
+  );
+
+  const preflight = useMemo(
+    () =>
+      staged
+        ? evaluatePreflight({
+            voltage: staged.voltage,
+            current: staged.current,
+            device: stagedDevice,
+            supplyPolarity: SUPPLY_POLARITY,
+          })
+        : null,
+    [staged, stagedDevice],
+  );
+
+  const isDirty = targetKey(staged) !== targetKey(appliedTarget);
+
+  const handleApplyStaged = useCallback(() => {
+    if (!staged || !armed) return;
+    pushEvent({
+      type: 'info',
+      message: `Apply & Power On · ${staged.name} — ${staged.voltage.toFixed(1)}V / ${staged.current.toFixed(1)}A`,
+    });
+    requestSend({
+      state: 3,
+      voltage: staged.voltage,
+      current: staged.current,
+      name: staged.name,
+      mode: staged.mode,
+      device: stagedDevice,
+      onCommitted: () => {
+        setAppliedTarget(staged);
+        setArmed(false);
+      },
+    });
+  }, [staged, armed, stagedDevice, requestSend, pushEvent]);
+
+  const handleDiscardStaged = useCallback(() => {
+    setStaged(appliedTarget);
+    setArmed(false);
+    pushEvent({ type: 'info', message: 'Staged target discarded' });
+  }, [appliedTarget, pushEvent]);
+
   const handleOutputOff = useCallback(() => {
-    requestSend({ state: 0, voltage: 0, current: 0, name: 'MANUAL CONTROL', mode: 'fixed' });
+    requestSend({
+      state: 0, voltage: 0, current: 0, name: 'MANUAL CONTROL', mode: 'fixed',
+      onCommitted: () => { setAppliedTarget(null); setArmed(false); },
+    });
     pushEvent({ type: 'warning', message: 'Output OFF · {"output":"off"} sent' });
   }, [requestSend, pushEvent]);
 
@@ -363,6 +398,21 @@ export default function Dashboard() {
 
       <main className="mx-auto max-w-5xl space-y-4 p-6">
         <TelemetryCards reading={reading} history={history} precision={2} />
+
+        <StageArmCard
+          staged={staged}
+          preflight={preflight}
+          armed={armed}
+          onToggleArm={setArmed}
+          onApply={handleApplyStaged}
+          onDiscard={handleDiscardStaged}
+          isDirty={isDirty}
+          appliedLabel={
+            appliedTarget
+              ? `${appliedTarget.name} · ${appliedTarget.voltage.toFixed(1)}V / ${appliedTarget.current.toFixed(1)}A`
+              : null
+          }
+        />
 
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <PdoSelector
